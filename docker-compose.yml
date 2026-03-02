@@ -1,0 +1,7 @@
+services:
+  controller:
+    build: .
+    ports:
+      - "8080:8080"
+    privileged: true   # gives container access to all host USB/serial devices
+    restart: unless-stopped

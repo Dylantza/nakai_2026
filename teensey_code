@@ -1,0 +1,172 @@
+#include <FlexCAN_T4.h>
+#include <Servo.h>
+
+// --- CAN Bus ---
+FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_16> canBus;
+
+// --- מנועים CAN ---
+const uint32_t MOTOR_L = 1;       
+const uint32_t MOTOR_R = 2;       
+const int POLE_PAIRS = 21;        
+
+float currentMaxSpeed = 200.0; 
+float leftTarget = 0.0;
+float rightTarget = 0.0;
+int leftDirection = -1;
+int rightDirection = 1; 
+
+// --- PWM ESC (TW-40A) ---
+Servo esc;
+const int escPin = 9;
+const int pwmMax = 2000;
+const int pwmCenter = 1500;
+int currentPWM = pwmCenter;
+int targetPower = 0;  // -100 עד 100, דינמי
+
+// --- PWM VESC (On/Off) ---
+Servo vesc;
+const int vescPin = 10;   // פין חדש ל-VESC
+int vescPWM = pwmCenter;
+
+// --- חיישן מים ---
+const int WATER_SENSOR_PIN = 14; 
+const int LED_PIN = 13;          
+unsigned long lastWaterCheck = 0;
+const int WATER_THRESHOLD_LOW = 400;
+
+// --- חיישן מרחק UART ---
+unsigned char distBuffer[4] = {0};
+int distIdx = 0;
+unsigned long lastDistCheck = 0;
+
+// --- פונקציה לשליחת RPM CAN ---
+void sendMotorRPM(uint32_t id, float rpm) {
+  CAN_message_t msg;
+  msg.id = id | ((uint32_t)3 << 8); 
+  msg.flags.extended = 1; 
+  msg.len = 4;
+  int32_t erpm = (int32_t)(rpm * POLE_PAIRS);
+  msg.buf[0] = (erpm >> 24) & 0xFF;
+  msg.buf[1] = (erpm >> 16) & 0xFF;
+  msg.buf[2] = (erpm >> 8) & 0xFF;
+  msg.buf[3] = erpm & 0xFF;
+  canBus.write(msg);
+}
+
+// --- פקודות מקלדת CAN ---
+void handleMotorCommands(char cmd) {
+  if (cmd == 'w') { leftTarget = currentMaxSpeed * leftDirection; rightTarget = currentMaxSpeed * rightDirection; }
+  else if (cmd == 's') { leftTarget = -currentMaxSpeed * leftDirection; rightTarget = -currentMaxSpeed * rightDirection; }
+  else if (cmd == 'a') { leftTarget = -currentMaxSpeed * leftDirection; rightTarget = currentMaxSpeed * rightDirection; }
+  else if (cmd == 'd') { leftTarget = currentMaxSpeed * leftDirection; rightTarget = -currentMaxSpeed * rightDirection; }
+  else if (cmd == 'x') { leftTarget = 0; rightTarget = 0; Serial.println(">>> CAN MOTORS STOPPED <<<"); }
+  else if (cmd == '+') { currentMaxSpeed += 200; Serial.print("Speed Up: "); Serial.println(currentMaxSpeed); }
+  else if (cmd == '-') { currentMaxSpeed -= 200; if(currentMaxSpeed < 0) currentMaxSpeed = 0; Serial.print("Speed Down: "); Serial.println(currentMaxSpeed); }
+}
+
+void setup() {
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH);
+
+  Serial.begin(115200);
+  Serial1.begin(115200); // חיישן מרחק
+
+  canBus.begin();
+  canBus.setBaudRate(1000000);
+
+  // --- אתחול ESC TW-40A ---
+  esc.attach(escPin, 1000, 2000);
+  esc.writeMicroseconds(pwmCenter); // התחלה במצב עצירה
+  delay(3000); 
+
+  // --- אתחול VESC ---
+  vesc.attach(vescPin, 1000, 2000);
+  vesc.writeMicroseconds(pwmCenter); // עצירה
+  delay(1000);
+
+  digitalWrite(LED_PIN, LOW);
+  Serial.println("--- System Ready ---");
+  Serial.println("Commands: 'vesc_on/vesc_off' = VESC, 'w/a/s/d/x' = CAN Motors, '-100..100' = TW-40A power");
+}
+
+void loop() {
+  unsigned long now = millis();
+
+  // --- 1. חיישן מרחק ---
+  if (now - lastDistCheck > 100) { 
+    lastDistCheck = now;
+    while(Serial1.available()) Serial1.read();
+    Serial1.write(0x55);
+  }
+
+  while (Serial1.available() > 0) {
+    uint8_t b = Serial1.read();
+    if (b == 0xFF) distIdx = 0;
+    distBuffer[distIdx++] = b;
+    if (distIdx == 4) {
+      uint8_t sum = (distBuffer[0] + distBuffer[1] + distBuffer[2]) & 0xFF;
+      if (distBuffer[3] == sum) {
+        int distanceMM = (distBuffer[1] << 8) + distBuffer[2];
+        if (distanceMM > 0) { Serial.print("Distance: "); Serial.println(distanceMM); }
+      }
+      distIdx = 0;
+    }
+  }
+
+  // --- 2. חיישן מים ---
+  if (now - lastWaterCheck > 500) {
+    lastWaterCheck = now;
+    int waterVal = analogRead(WATER_SENSOR_PIN);
+    if (waterVal < WATER_THRESHOLD_LOW) {
+      digitalWrite(LED_PIN, HIGH);
+      Serial.println("Water!!!");
+
+    } else {
+      digitalWrite(LED_PIN, LOW);
+    }
+  }
+
+ // --- 3. פקודות Serial ---
+if (Serial.available() > 0) {
+    String input = Serial.readStringUntil('\n');
+    input.trim();
+    input.toLowerCase();
+
+    // --- Brush VESC (On/Off) ---
+    if (input == "brush_on") {
+      vescPWM = pwmMax;
+      Serial.println("Brush Motor: ON (2000)");
+    }
+    else if (input == "brush_off") {
+      vescPWM = pwmCenter;
+      Serial.println("Brush Motor: OFF (1500)");
+    }
+    // --- CAN motors ---
+    else if (input.length() == 1 && (input[0] == 'w' || input[0] == 's' || input[0] == 'a' || input[0] == 'd' || input[0] == 'x' || input[0] == '+' || input[0] == '-')) {
+      handleMotorCommands(input[0]);
+    }
+    // --- TW-40A dynamic ---
+    else {
+      int power = input.toInt();
+      targetPower = constrain(power, -100, 100);
+    }
+}
+
+  // --- 4. עדכון ESC/TW-40A דינמי ---
+  if (targetPower == 0) {
+    currentPWM = pwmCenter;
+  } else {
+    int targetPWM = pwmCenter + (targetPower * (pwmMax - pwmCenter) / 100);
+    currentPWM += (targetPWM - currentPWM) / 6;
+  }
+  esc.writeMicroseconds(currentPWM);
+
+  // --- 5. עדכון VESC ---
+  vesc.writeMicroseconds(vescPWM);
+
+  // --- 6. עדכון CAN ---
+  sendMotorRPM(MOTOR_L, leftTarget);
+  sendMotorRPM(MOTOR_R, rightTarget);
+
+  delay(2);
+}

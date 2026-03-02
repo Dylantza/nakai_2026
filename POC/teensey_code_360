@@ -1,0 +1,75 @@
+#include <FlexCAN_T4.h>
+
+FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_16> canBus;
+
+const uint32_t MOTOR_L = 1;
+const uint32_t MOTOR_R = 2;
+const int POLE_PAIRS = 21;
+
+float currentMaxSpeed = 200.0;
+float leftTarget = 0.0;
+float rightTarget = 0.0;
+
+int leftDirection = -1;
+int rightDirection = 1;
+
+String serialBuf = "";
+
+void setup() {
+  Serial.begin(115200);
+  canBus.begin();
+  canBus.setBaudRate(1000000);
+}
+
+void sendMotorRPM(uint32_t id, float rpm) {
+  CAN_message_t msg;
+  msg.id = id | ((uint32_t)3 << 8);
+  msg.flags.extended = 1;
+  msg.len = 4;
+  int32_t erpm = (int32_t)(rpm * POLE_PAIRS);
+  msg.buf[0] = (erpm >> 24) & 0xFF;
+  msg.buf[1] = (erpm >> 16) & 0xFF;
+  msg.buf[2] = (erpm >> 8) & 0xFF;
+  msg.buf[3] = erpm & 0xFF;
+  canBus.write(msg);
+}
+
+void loop() {
+  while (Serial.available() > 0) {
+    char c = Serial.read();
+
+    if (c == '\n') {
+      serialBuf.trim();
+
+      if (serialBuf.startsWith("M")) {
+        // Analog motor command: M<left>,<right>
+        // Values are -100 to 100 (percentage of currentMaxSpeed)
+        int commaIdx = serialBuf.indexOf(',');
+        if (commaIdx > 1) {
+          int leftPct  = serialBuf.substring(1, commaIdx).toInt();
+          int rightPct = serialBuf.substring(commaIdx + 1).toInt();
+          leftPct  = constrain(leftPct, -100, 100);
+          rightPct = constrain(rightPct, -100, 100);
+          leftTarget  = (currentMaxSpeed * leftPct  / 100.0) * leftDirection;
+          rightTarget = (currentMaxSpeed * rightPct / 100.0) * rightDirection;
+        }
+      }
+      // Legacy single-char commands (keyboard support)
+      else if (serialBuf == "w") { leftTarget = currentMaxSpeed * leftDirection;  rightTarget = currentMaxSpeed * rightDirection; }
+      else if (serialBuf == "s") { leftTarget = -currentMaxSpeed * leftDirection; rightTarget = -currentMaxSpeed * rightDirection; }
+      else if (serialBuf == "a") { leftTarget = -currentMaxSpeed * leftDirection; rightTarget = currentMaxSpeed * rightDirection; }
+      else if (serialBuf == "d") { leftTarget = currentMaxSpeed * leftDirection;  rightTarget = -currentMaxSpeed * rightDirection; }
+      else if (serialBuf == "x") { leftTarget = 0; rightTarget = 0; }
+      else if (serialBuf == "+") { currentMaxSpeed += 200; }
+      else if (serialBuf == "-") { currentMaxSpeed -= 200; if(currentMaxSpeed < 0) currentMaxSpeed = 0; }
+
+      serialBuf = "";
+    } else {
+      serialBuf += c;
+    }
+  }
+
+  sendMotorRPM(MOTOR_L, leftTarget);
+  sendMotorRPM(MOTOR_R, rightTarget);
+  delay(10);
+}

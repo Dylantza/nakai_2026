@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ROV-1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cyan:        #00d4ff;
+    --cyan-glow:   rgba(0,212,255,0.22);
+    --cyan-dim:    rgba(0,212,255,0.06);
+    --ok:          #00ffb3;
+    --ok-glow:     rgba(0,255,179,0.22);
+    --danger:      #ff2d55;
+    --danger-glow: rgba(255,45,85,0.22);
+    --warn:        #ffbb00;
+    --hi:          rgba(255,255,255,0.90);
+    --mid:         rgba(255,255,255,0.42);
+    --dim:         rgba(255,255,255,0.17);
+    --panel:       rgba(0,8,22,0.80);
+    --line:        rgba(255,255,255,0.06);
+    --fv:          'Share Tech Mono', 'Courier New', monospace;
+    --fu:          'Rajdhani', 'Arial Narrow', sans-serif;
+  }
+
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+  html, body {
+    width:100vw; height:100vh; overflow:hidden;
+    background:#000810;
+    -webkit-user-select:none; user-select:none;
+    cursor:crosshair;
+  }
+
+  /* ─── CAMERA ─────────────────────────────────────────── */
+  #cam-feed {
+    position:fixed; inset:0;
+    width:100%; height:100%;
+    object-fit:cover; z-index:0;
+    display:block;
+  }
+
+  /* ─── ATMOSPHERE ──────────────────────────────────────── */
+  .atm-grad {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    background:
+      linear-gradient(to bottom,
+        rgba(0,8,22,0.80) 0%,
+        transparent 20%,
+        transparent 72%,
+        rgba(0,8,22,0.88) 100%),
+      linear-gradient(to right,
+        rgba(0,8,22,0.60) 0%,
+        transparent 24%,
+        transparent 76%,
+        rgba(0,8,22,0.60) 100%);
+  }
+  .atm-scan {
+    position:fixed; inset:0; z-index:2; pointer-events:none;
+    background:repeating-linear-gradient(
+      0deg, transparent 0, transparent 3px,
+      rgba(0,0,0,0.022) 3px, rgba(0,0,0,0.022) 4px
+    );
+  }
+
+  /* ─── HUD ROOT ────────────────────────────────────────── */
+  .hud { position:fixed; inset:0; z-index:10; pointer-events:none; }
+  .hud > * { pointer-events:auto; }
+  .nop { pointer-events:none; }
+
+  /* ─── CORNER BRACKETS ─────────────────────────────────── */
+  .brk {
+    position:absolute; width:14px; height:14px;
+    border-color:var(--cyan); border-style:solid; border-width:0;
+    opacity:0.22;
+  }
+  .brk-tl { top:18px; left:18px; border-top-width:1px; border-left-width:1px; }
+  .brk-tr { top:18px; right:18px; border-top-width:1px; border-right-width:1px; }
+  .brk-bl { bottom:18px; left:18px; border-bottom-width:1px; border-left-width:1px; }
+  .brk-br { bottom:18px; right:18px; border-bottom-width:1px; border-right-width:1px; }
+
+  /* ─── CROSSHAIR ───────────────────────────────────────── */
+  .xhair {
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    width:16px; height:16px; opacity:0.28;
+  }
+  .xhair::before {
+    content:''; position:absolute;
+    top:50%; left:0; right:0; height:1px;
+    background:var(--cyan); transform:translateY(-50%);
+  }
+  .xhair::after {
+    content:''; position:absolute;
+    left:50%; top:0; bottom:0; width:1px;
+    background:var(--cyan); transform:translateX(-50%);
+  }
+  .xhair-dot {
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    width:2px; height:2px; border-radius:50%;
+    background:var(--cyan);
+    box-shadow:0 0 8px var(--cyan);
+    opacity:2; /* browsers cap at 1 */
+  }
+
+  /* ─── TOP BAR ─────────────────────────────────────────── */
+  .top-bar {
+    position:absolute; top:0; left:0; right:0; height:48px;
+    display:flex; align-items:center;
+    padding:0 26px;
+  }
+
+  .rov-id {
+    font-family:var(--fv);
+    font-size:11px; letter-spacing:8px;
+    color:var(--cyan);
+    text-shadow:0 0 24px var(--cyan-glow);
+  }
+
+  .dir-badge {
+    position:absolute; left:50%; transform:translateX(-50%);
+    font-family:var(--fu); font-size:10px; font-weight:400; letter-spacing:6px;
+    text-transform:uppercase; color:var(--dim);
+    transition:color .22s, text-shadow .22s;
+    white-space:nowrap;
+  }
+  .dir-badge.forward { color:var(--ok);  text-shadow:0 0 18px var(--ok-glow); }
+  .dir-badge.reverse { color:var(--cyan); text-shadow:0 0 18px var(--cyan-glow); }
+  .dir-badge.left,
+  .dir-badge.right   { color:rgba(255,255,255,.60); }
+
+  .top-right {
+    margin-left:auto; display:flex; align-items:center; gap:18px;
+  }
+  .live-dot {
+    width:4px; height:4px; border-radius:50%;
+    background:var(--ok); box-shadow:0 0 8px var(--ok);
+    animation:ldpulse 2.6s ease-in-out infinite;
+  }
+  @keyframes ldpulse { 0%,100%{opacity:1} 50%{opacity:.18} }
+
+  .snap-link {
+    font-family:var(--fu); font-size:8px; font-weight:400; letter-spacing:4px;
+    color:var(--dim); text-decoration:none; transition:color .18s;
+  }
+  .snap-link:hover { color:var(--cyan); }
+
+  /* ─── WATER WARNING ───────────────────────────────────── */
+  .water-overlay {
+    position:absolute; top:48px; left:0; right:0;
+    background:rgba(255,45,85,.07);
+    border-bottom:1px solid rgba(255,45,85,.28);
+    padding:5px 0; text-align:center;
+    font-family:var(--fu); font-size:8px; font-weight:500; letter-spacing:7px;
+    color:var(--danger); display:none; pointer-events:none;
+    animation:wblink .65s ease-in-out infinite;
+  }
+  .water-overlay.show { display:block; }
+  @keyframes wblink { 0%,100%{opacity:1} 50%{opacity:.08} }
+
+  /* ─── LEFT PANEL ──────────────────────────────────────── */
+  .left-panel {
+    position:absolute; left:0; top:50%; transform:translateY(-50%);
+    padding:0 34px;
+    display:flex; flex-direction:column; gap:38px;
+  }
+
+  /* ─── RIGHT PANEL ─────────────────────────────────────── */
+  .right-panel {
+    position:absolute; right:0; top:50%; transform:translateY(-50%);
+    padding:0 34px;
+    display:flex; flex-direction:column; gap:38px;
+    text-align:right;
+  }
+
+  /* ─── DATA BLOCK ──────────────────────────────────────── */
+  .db-lbl {
+    font-family:var(--fu); font-size:7px; font-weight:400; letter-spacing:4px;
+    color:var(--dim); text-transform:uppercase; margin-bottom:5px;
+  }
+  .db-val {
+    font-family:var(--fv); font-size:32px; line-height:1;
+    color:var(--hi); transition:color .22s, text-shadow .22s;
+  }
+  .db-val.accent { color:var(--cyan);   text-shadow:0 0 28px var(--cyan-glow); }
+  .db-val.ok     { color:var(--ok);     text-shadow:0 0 24px var(--ok-glow); }
+  .db-val.danger { color:var(--danger); text-shadow:0 0 22px var(--danger-glow); }
+  .db-val.warn   { color:var(--warn); }
+  .db-val.dim    { color:var(--dim); text-shadow:none; }
+
+  .db-unit {
+    font-family:var(--fu); font-size:8px; font-weight:300; letter-spacing:3px;
+    color:var(--dim); margin-top:4px;
+  }
+  .db-sub {
+    font-family:var(--fu); font-size:9px; font-weight:300; letter-spacing:2px;
+    color:var(--dim); margin-top:4px;
+  }
+
+  /* ─── THIN BAR ────────────────────────────────────────── */
+  .thin-bar {
+    height:1px; background:var(--line);
+    position:relative; overflow:visible; margin-top:10px;
+  }
+  .thin-bar-fill {
+    position:absolute; top:0; left:0; height:100%;
+    background:var(--cyan); box-shadow:0 0 8px var(--cyan-glow);
+    transition:width .2s;
+  }
+  .thin-bar-fill.g { background:var(--ok);     box-shadow:0 0 8px var(--ok-glow); }
+  .thin-bar-fill.r { background:var(--danger);  box-shadow:0 0 8px var(--danger-glow); }
+
+  /* ─── SPLIT BAR (impeller) ────────────────────────────── */
+  .split-bar {
+    height:1px; background:var(--line);
+    position:relative; overflow:visible; margin-top:10px;
+  }
+  .split-bar-mid {
+    position:absolute; left:50%; top:-4px; bottom:-4px;
+    width:1px; background:rgba(255,255,255,.10);
+  }
+  .split-bar-fill {
+    position:absolute; top:0; height:100%;
+    transition:all .15s;
+  }
+
+  /* ─── SYSTEMS BLOCK ───────────────────────────────────── */
+  .sys-rows { display:flex; flex-direction:column; gap:9px; }
+  .sys-row  { display:flex; align-items:baseline; gap:12px; justify-content:flex-end; }
+  .sys-lbl  {
+    font-family:var(--fu); font-size:7px; font-weight:400; letter-spacing:4px;
+    color:var(--dim); text-transform:uppercase;
+  }
+  .sys-val {
+    font-family:var(--fv); font-size:13px; letter-spacing:1px;
+    color:var(--dim); transition:color .2s, text-shadow .2s;
+  }
+  .sys-val.ok     { color:var(--ok);     text-shadow:0 0 12px var(--ok-glow); }
+  .sys-val.danger { color:var(--danger); text-shadow:0 0 12px var(--danger-glow); }
+  .sys-val.accent { color:var(--cyan);   text-shadow:0 0 12px var(--cyan-glow); }
+  @keyframes sblink { 0%,100%{opacity:1} 50%{opacity:.08} }
+  .sys-val.blink  { animation:sblink .65s infinite; }
+
+  /* ─── BOTTOM BAR ──────────────────────────────────────── */
+  .bottom-bar {
+    position:absolute; bottom:0; left:0; right:0;
+    padding:16px 26px 22px;
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    min-height:110px;
+  }
+
+  /* vertical separator */
+  .vsep {
+    width:1px; height:56px; flex-shrink:0;
+    background:linear-gradient(to bottom, transparent, var(--line), transparent);
+  }
+
+  /* D-PAD */
+  .dpad {
+    display:grid;
+    grid-template-columns:repeat(3, 46px);
+    grid-template-rows:repeat(3, 46px);
+    gap:3px; flex-shrink:0;
+  }
+  .dc { display:flex; align-items:center; justify-content:center; }
+
+  .btn {
+    width:100%; height:100%;
+    background:rgba(0,8,22,.55);
+    color:var(--dim);
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:1px;
+    font-family:var(--fv); font-size:11px;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:all .09s;
+    touch-action:manipulation;
+    -webkit-tap-highlight-color:transparent;
+    backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px);
+  }
+  .btn:hover {
+    color:var(--cyan); border-color:rgba(0,212,255,.24);
+    background:rgba(0,212,255,.05);
+  }
+  .btn:active, .btn.pressed {
+    background:rgba(0,212,255,.12);
+    border-color:rgba(0,212,255,.48);
+    color:var(--cyan);
+    box-shadow:0 0 16px var(--cyan-glow), inset 0 0 8px rgba(0,212,255,.07);
+  }
+  .btn.e-stop {
+    background:rgba(255,45,85,.04);
+    border-color:rgba(255,45,85,.12);
+    color:rgba(255,45,85,.32);
+    font-size:7px; letter-spacing:2px;
+    font-family:var(--fu); font-weight:500;
+  }
+  .btn.e-stop:hover { color:var(--danger); border-color:rgba(255,45,85,.32); }
+  .btn.e-stop:active, .btn.e-stop.pressed {
+    background:rgba(255,45,85,.14); border-color:rgba(255,45,85,.52);
+    color:var(--danger); box-shadow:0 0 16px var(--danger-glow);
+  }
+
+  /* BOTTOM METERS */
+  .bottom-meters {
+    flex:1; max-width:195px;
+    display:flex; flex-direction:column; gap:15px;
+  }
+  .bm-row { display:flex; flex-direction:column; gap:6px; }
+  .bm-head { display:flex; justify-content:space-between; align-items:baseline; }
+  .bm-lbl {
+    font-family:var(--fu); font-size:7px; font-weight:400; letter-spacing:4px;
+    color:var(--dim); text-transform:uppercase;
+  }
+  .bm-val {
+    font-family:var(--fv); font-size:10px; letter-spacing:1px; color:var(--mid);
+  }
+
+  /* SIDE BUTTONS */
+  .side-btns {
+    display:grid;
+    grid-template-columns:62px 62px;
+    grid-template-rows:repeat(3, 31px);
+    gap:3px; flex-shrink:0;
+  }
+  .sbtn {
+    background:rgba(0,8,22,.50);
+    color:var(--dim);
+    border:1px solid rgba(255,255,255,.06);
+    border-radius:1px;
+    font-family:var(--fu); font-size:8px; font-weight:500; letter-spacing:2px;
+    text-transform:uppercase; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:all .09s;
+    touch-action:manipulation;
+    -webkit-tap-highlight-color:transparent;
+    backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px);
+  }
+  .sbtn:hover { color:var(--cyan); border-color:rgba(0,212,255,.20); background:rgba(0,212,255,.04); }
+  .sbtn:active {
+    background:rgba(0,212,255,.10); border-color:rgba(0,212,255,.40);
+    color:var(--cyan); box-shadow:0 0 12px var(--cyan-glow);
+  }
+  .sbtn.imp-stop { border-color:rgba(255,45,85,.10); color:rgba(255,45,85,.28); }
+  .sbtn.imp-stop:hover { color:var(--danger); border-color:rgba(255,45,85,.28); }
+  .sbtn.imp-stop:active {
+    background:rgba(255,45,85,.10); border-color:rgba(255,45,85,.42);
+    color:var(--danger); box-shadow:0 0 12px var(--danger-glow);
+  }
+  .sbtn.brush-on {
+    color:var(--ok); border-color:rgba(0,255,179,.22);
+    background:rgba(0,255,179,.04); text-shadow:0 0 10px var(--ok-glow);
+  }
+
+  /* KB HINT */
+  .kb-hint {
+    position:absolute; bottom:124px; left:50%; transform:translateX(-50%);
+    font-family:var(--fu); font-size:7px; letter-spacing:3px;
+    color:rgba(255,255,255,.09); white-space:nowrap;
+  }
+</style>
+</head>
+<body>
+
+<img id="cam-feed" src="/video_feed" alt="">
+<div class="atm-grad"></div>
+<div class="atm-scan"></div>
+
+<div class="hud">
+
+  <!-- corner brackets -->
+  <div class="brk brk-tl nop"></div>
+  <div class="brk brk-tr nop"></div>
+  <div class="brk brk-bl nop"></div>
+  <div class="brk brk-br nop"></div>
+
+  <!-- crosshair -->
+  <div class="xhair nop"><div class="xhair-dot"></div></div>
+
+  <!-- top bar -->
+  <div class="top-bar">
+    <div class="rov-id">ROV·1</div>
+    <div class="dir-badge nop" id="dir-badge">■&nbsp;&nbsp;STOPPED</div>
+    <div class="top-right">
+      <div class="live-dot nop"></div>
+      <a class="snap-link" href="/snapshot" target="_blank">SNAP</a>
+    </div>
+  </div>
+
+  <!-- water warning -->
+  <div class="water-overlay nop" id="water-overlay">WATER INGRESS DETECTED</div>
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel nop">
+
+    <div>
+      <div class="db-lbl">RANGE</div>
+      <div class="db-val dim" id="range-val">---</div>
+      <div class="db-unit">MM</div>
+    </div>
+
+    <div>
+      <div class="db-lbl">SPEED</div>
+      <div class="db-val accent" id="spd-big">5</div>
+      <div class="db-unit" id="spd-max-lbl">OF 10</div>
+      <div class="thin-bar" style="width:70px">
+        <div class="thin-bar-fill g" id="spd-bar" style="width:50%"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel nop">
+
+    <div>
+      <div class="db-lbl">IMPELLER</div>
+      <div class="db-val dim" id="imp-pwr">0%</div>
+      <div class="db-sub" id="imp-pwm">PWM · 1500</div>
+      <div class="split-bar" style="width:70px;margin-left:auto">
+        <div class="split-bar-mid"></div>
+        <div class="split-bar-fill" id="imp-bar"
+             style="width:0%;left:50%;background:var(--ok);box-shadow:0 0 8px var(--ok-glow)"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="db-lbl" style="margin-bottom:10px">SYSTEMS</div>
+      <div class="sys-rows">
+        <div class="sys-row">
+          <span class="sys-lbl">BRUSH</span>
+          <span class="sys-val dim" id="hud-brush">OFF</span>
+        </div>
+        <div class="sys-row">
+          <span class="sys-lbl">H2O</span>
+          <span class="sys-val ok" id="hud-water">OK</span>
+        </div>
+        <div class="sys-row">
+          <span class="sys-lbl">TEENSY</span>
+          <span class="sys-val dim" id="hud-teensy">---</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- kb hint -->
+  <div class="kb-hint nop">WASD · ±SPD · ↑↓ IMP · 0 IMP-STOP · B BRUSH · X E-STOP</div>
+
+  <!-- bottom bar -->
+  <div class="bottom-bar">
+
+    <!-- d-pad -->
+    <div class="dpad">
+      <div class="dc"></div>
+      <div class="dc">
+        <button class="btn" id="btn-w"
+          ontouchstart="pressDir('w')" ontouchend="releaseDir('w')"
+          onmousedown="pressDir('w')" onmouseup="releaseDir('w')" onmouseleave="releaseDir('w')">▲</button>
+      </div>
+      <div class="dc"></div>
+      <div class="dc">
+        <button class="btn" id="btn-a"
+          ontouchstart="pressDir('a')" ontouchend="releaseDir('a')"
+          onmousedown="pressDir('a')" onmouseup="releaseDir('a')" onmouseleave="releaseDir('a')">◀</button>
+      </div>
+      <div class="dc">
+        <button class="btn e-stop" id="btn-x"
+          onmousedown="sendCmd('x')" ontouchstart="sendCmd('x')">STOP</button>
+      </div>
+      <div class="dc">
+        <button class="btn" id="btn-d"
+          ontouchstart="pressDir('d')" ontouchend="releaseDir('d')"
+          onmousedown="pressDir('d')" onmouseup="releaseDir('d')" onmouseleave="releaseDir('d')">▶</button>
+      </div>
+      <div class="dc"></div>
+      <div class="dc">
+        <button class="btn" id="btn-s"
+          ontouchstart="pressDir('s')" ontouchend="releaseDir('s')"
+          onmousedown="pressDir('s')" onmouseup="releaseDir('s')" onmouseleave="releaseDir('s')">▼</button>
+      </div>
+      <div class="dc"></div>
+    </div>
+
+    <div class="vsep nop"></div>
+
+    <!-- meters -->
+    <div class="bottom-meters">
+      <div class="bm-row">
+        <div class="bm-head">
+          <span class="bm-lbl">SPD</span>
+          <span class="bm-val" id="spd-val">5 / 10</span>
+        </div>
+        <div class="thin-bar">
+          <div class="thin-bar-fill g" id="spd-bar2" style="width:50%"></div>
+        </div>
+      </div>
+      <div class="bm-row">
+        <div class="bm-head">
+          <span class="bm-lbl">IMP</span>
+          <span class="bm-val" id="imp-val">0%</span>
+        </div>
+        <div class="split-bar">
+          <div class="split-bar-mid"></div>
+          <div class="split-bar-fill" id="imp-bar2"
+               style="width:0%;left:50%;background:var(--ok);box-shadow:0 0 8px var(--ok-glow)"></div>
+        </div>
+      </div>
+      <div class="bm-row">
+        <div class="bm-head">
+          <span class="bm-lbl">PWR</span>
+          <span class="bm-val" id="rdp-val">0%</span>
+        </div>
+        <div class="thin-bar">
+          <div class="thin-bar-fill" id="rdp-bar" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="vsep nop"></div>
+
+    <!-- side buttons -->
+    <div class="side-btns">
+      <button class="sbtn" onmousedown="sendCmd('+')"        ontouchstart="sendCmd('+')">SPD +</button>
+      <button class="sbtn" onmousedown="sendCmd('imp_up')"   ontouchstart="sendCmd('imp_up')">IMP +</button>
+      <button class="sbtn" onmousedown="sendCmd('-')"        ontouchstart="sendCmd('-')">SPD −</button>
+      <button class="sbtn" onmousedown="sendCmd('imp_down')" ontouchstart="sendCmd('imp_down')">IMP −</button>
+      <button class="sbtn imp-stop" onmousedown="sendCmd('imp_stop')" ontouchstart="sendCmd('imp_stop')">IMP 0</button>
+      <button class="sbtn" id="brush-btn" onmousedown="sendCmd('brush')" ontouchstart="sendCmd('brush')">BRUSH</button>
+    </div>
+
+  </div>
+
+</div><!-- /hud -->
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+const socket = io();
+function sendCmd(cmd) { socket.emit('command', { cmd }); }
+
+/* ── direction hold ── */
+const heldDirs = new Set();
+const dirPriority = ['w','s','a','d'];
+function pressDir(k)   { if (!heldDirs.has(k)) { heldDirs.add(k); resolveDir(); } }
+function releaseDir(k) { heldDirs.delete(k); resolveDir(); }
+function resolveDir() {
+  for (const k of dirPriority) { if (heldDirs.has(k)) { sendCmd(k); return; } }
+  sendCmd('x');
+}
+
+function setDirVisual(dir) {
+  ['btn-w','btn-s','btn-a','btn-d'].forEach(id => document.getElementById(id).classList.remove('pressed'));
+  const map = { FORWARD:'btn-w', REVERSE:'btn-s', LEFT:'btn-a', RIGHT:'btn-d' };
+  if (map[dir]) document.getElementById(map[dir]).classList.add('pressed');
+}
+
+/* ── keyboard ── */
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (['w','s','a','d'].includes(k)) { pressDir(k); e.preventDefault(); }
+  else if (k === 'x')                   sendCmd('x');
+  else if (k === '+' || k === '=')      sendCmd('+');
+  else if (k === '-')                   sendCmd('-');
+  else if (k === 'arrowup')           { sendCmd('imp_up');   e.preventDefault(); }
+  else if (k === 'arrowdown')         { sendCmd('imp_down'); e.preventDefault(); }
+  else if (k === '0')                   sendCmd('imp_stop');
+  else if (k === 'b')                   sendCmd('brush');
+});
+document.addEventListener('keyup', e => {
+  const k = e.key.toLowerCase();
+  if (['w','s','a','d'].includes(k)) releaseDir(k);
+});
+
+/* ── impeller fill helper ── */
+function setImpFill(id, pwr) {
+  const el = document.getElementById(id);
+  if (pwr > 0) {
+    el.style.left = '50%';
+    el.style.width = (pwr / 2) + '%';
+    el.style.background = 'var(--ok)';
+    el.style.boxShadow = '0 0 8px var(--ok-glow)';
+  } else if (pwr < 0) {
+    const w = Math.abs(pwr) / 2;
+    el.style.left = (50 - w) + '%';
+    el.style.width = w + '%';
+    el.style.background = 'var(--cyan)';
+    el.style.boxShadow = '0 0 8px var(--cyan-glow)';
+  } else {
+    el.style.width = '0%';
+  }
+}
+
+/* ── state updates ── */
+const dirIcons = { STOPPED:'■', FORWARD:'▲', REVERSE:'▼', LEFT:'◄', RIGHT:'►' };
+
+socket.on('state', s => {
+  /* direction */
+  const badge = document.getElementById('dir-badge');
+  badge.textContent = (dirIcons[s.direction] || '?') + '\u2003' + s.direction;
+  badge.className = 'dir-badge nop ' + s.direction.toLowerCase();
+  setDirVisual(s.direction);
+
+  /* speed */
+  document.getElementById('spd-big').textContent = s.speed;
+  document.getElementById('spd-max-lbl').textContent = 'OF ' + s.speed_max;
+  const sp = (s.speed / s.speed_max * 100) + '%';
+  document.getElementById('spd-bar').style.width  = sp;
+  document.getElementById('spd-bar2').style.width = sp;
+  document.getElementById('spd-val').textContent  = s.speed + ' / ' + s.speed_max;
+
+  /* impeller */
+  const ap = Math.abs(s.impeller_power);
+  const ipEl = document.getElementById('imp-pwr');
+  ipEl.textContent = s.impeller_power + '%';
+  ipEl.className = 'db-val ' + (ap > 0 ? 'accent' : 'dim');
+  document.getElementById('imp-pwm').textContent = 'PWM · ' + s.impeller_read_pwm;
+  setImpFill('imp-bar',  s.impeller_power);
+  setImpFill('imp-bar2', s.impeller_power);
+  document.getElementById('imp-val').textContent = s.impeller_power + '%';
+
+  /* read power */
+  const rdp = Math.abs(s.impeller_read_power);
+  const rdpBar = document.getElementById('rdp-bar');
+  rdpBar.style.width = rdp + '%';
+  rdpBar.className = 'thin-bar-fill' + (rdp > 50 ? ' r' : '');
+  document.getElementById('rdp-val').textContent = s.impeller_read_power + '%';
+
+  /* brush */
+  const brushEl = document.getElementById('hud-brush');
+  brushEl.textContent = s.brush_on ? 'ON' : 'OFF';
+  brushEl.className = 'sys-val ' + (s.brush_on ? 'ok' : 'dim');
+  document.getElementById('brush-btn').className = 'sbtn' + (s.brush_on ? ' brush-on' : '');
+
+  /* water */
+  const wEl = document.getElementById('hud-water');
+  const wOv = document.getElementById('water-overlay');
+  if (s.water_warning) {
+    wEl.textContent = 'WARN'; wEl.className = 'sys-val blink';
+    wOv.classList.add('show');
+  } else {
+    wEl.textContent = 'OK'; wEl.className = 'sys-val ok';
+    wOv.classList.remove('show');
+  }
+
+  /* teensy */
+  const tc = document.getElementById('hud-teensy');
+  tc.textContent = s.teensy_connected ? 'ON' : '---';
+  tc.className = 'sys-val ' + (s.teensy_connected ? 'ok' : 'dim');
+
+  /* range */
+  const rv = document.getElementById('range-val');
+  if (s.distance_mm > 0) {
+    rv.textContent = s.distance_mm;
+    rv.className = 'db-val ' +
+      (s.distance_mm > 500 ? 'ok' : s.distance_mm > 200 ? 'warn' : 'danger');
+  } else {
+    rv.textContent = '---';
+    rv.className = 'db-val dim';
+  }
+});
+</script>
+</body>
+</html>
