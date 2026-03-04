@@ -16,10 +16,11 @@ Browser  ──WebSocket──▶  Flask/SocketIO Server (Jetson Nano)
 ```
 
 **Components:**
-- **`server.py`** — Flask + SocketIO backend. Manages serial connection to the Teensy, camera stream, and relays commands/telemetry to the browser.
+- **`server.py`** — Flask + SocketIO backend. Manages serial connection to the Teensy, camera stream, and relays commands/telemetry to the browser. Includes a maneuver subsystem for secondary thruster control.
 - **`templates/index.html`** — Cyberpunk HUD interface. Works on desktop (keyboard) and mobile (touch).
 - **`Dockerfile` / `docker-compose.yml`** — Containerized deployment for the Jetson Nano.
-- **`teensey_code`** — Firmware running on the Teensy microcontroller.
+- **`teensey_code`** — Firmware running on the Teensy microcontroller. Controls CAN bus drive motors, TW-40A ESC (main impeller), and VESC (brush motor).
+- **`electronic_componenet.drawio.png`** — Electronics component diagram.
 
 ---
 
@@ -30,6 +31,9 @@ Browser  ──WebSocket──▶  Flask/SocketIO Server (Jetson Nano)
 | Jetson Nano | JetPack 4.6+ (Ubuntu 18.04) or JetPack 5.x (Ubuntu 20.04) |
 | Basler USB3 camera | Detected automatically via pypylon |
 | Teensy (PJRC) | Connected via USB, auto-detected on `/dev/ttyACM*` |
+| CAN bus drive motors | MOTOR_L (id=1), MOTOR_R (id=2) via FlexCAN_T4 at 1 Mbit/s |
+| TW-40A ESC | Main impeller/thruster, controlled via PWM on Teensy pin 9 |
+| VESC | Brush motor, controlled via PWM on Teensy pin 10 |
 | Network | Ethernet or Wi-Fi on the same network as the operator |
 
 ---
@@ -78,10 +82,12 @@ Touch controls mirror the on-screen buttons.
 |---|---|
 | **Range** | Distance sensor via Teensy serial (`Distance: <mm>`) |
 | **Speed** | Current speed setting (1–10) |
-| **Impeller** | Power % and PWM value (1500 µs center) |
-| **Brush** | ON/OFF state echoed from Teensy |
+| **Impeller** | Power % and PWM value (1500 µs center) — TW-40A ESC |
+| **Brush** | ON/OFF state echoed from Teensy — VESC |
 | **H2O** | Water ingress warning from Teensy (`Water` in serial line) |
 | **Teensy** | Connection status |
+| **Maneuver direction** | STOPPED / FORWARD / REVERSE / LEFT / RIGHT |
+| **Maneuver power** | 0–100% power for secondary maneuver thrusters |
 
 ---
 
@@ -319,8 +325,15 @@ Commands sent as ASCII strings terminated with `\n`:
 | `-` | Decrease speed |
 | `<number>` | Set impeller power (e.g. `50`, `-30`) |
 | `0` | Impeller stop |
-| `brush_on` | Turn brush on |
-| `brush_off` | Turn brush off |
+| `brush_on` | Turn brush on (VESC → 2000 µs) |
+| `brush_off` | Turn brush off (VESC → 1500 µs) |
+| `man_w` | Maneuver thrusters forward |
+| `man_s` | Maneuver thrusters reverse |
+| `man_a` | Maneuver thrusters left |
+| `man_d` | Maneuver thrusters right |
+| `man_x` | Stop maneuver thrusters |
+| `man_spd_up` | Increase maneuver power (+10%) |
+| `man_spd_down` | Decrease maneuver power (−10%) |
 
 Telemetry received from the Teensy (ASCII lines):
 
@@ -347,16 +360,18 @@ Telemetry received from the Teensy (ASCII lines):
 
 ```
 .
-├── server.py             # Main Flask/SocketIO application
+├── server.py                        # Main Flask/SocketIO application
 ├── templates/
-│   └── index.html        # Browser HUD
-├── Dockerfile            # Container build
-├── docker-compose.yml    # Deployment config
-├── requirements.txt      # Python dependencies
-├── setup_service.py      # Systemd service installer (run on Jetson)
-├── teensey_code          # Teensy firmware source
-├── JETSON_SETUP.md       # Full Jetson Nano setup guide
-└── POC/                  # Proof-of-concept scripts and experiments
+│   └── index.html                   # Browser HUD
+├── Dockerfile                       # Container build
+├── docker-compose.yml               # Deployment config
+├── requirements.txt                 # Python dependencies
+├── setup_service.py                 # Systemd service installer (run on Jetson)
+├── teensey_code                     # Teensy firmware source
+├── electronics.xml                  # Electronics schematic (draw.io source)
+├── electronic_componenet.drawio.png # Electronics component diagram
+├── JETSON_SETUP.md                  # Full Jetson Nano setup guide
+└── POC/                             # Proof-of-concept scripts and experiments
 ```
 
 ---
