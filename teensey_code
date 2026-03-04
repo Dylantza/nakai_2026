@@ -4,46 +4,65 @@
 // --- CAN Bus ---
 FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_16> canBus;
 
-// --- מנועים CAN ---
-const uint32_t MOTOR_L = 1;       
-const uint32_t MOTOR_R = 2;       
-const int POLE_PAIRS = 21;        
+// --- CAN Motors ---
+const uint32_t MOTOR_L = 1;
+const uint32_t MOTOR_R = 2;
+const int POLE_PAIRS = 21;
 
-float currentMaxSpeed = 200.0; 
+float currentMaxSpeed = 200.0;
 float leftTarget = 0.0;
 float rightTarget = 0.0;
 int leftDirection = -1;
-int rightDirection = 1; 
+int rightDirection = 1;
 
-// --- PWM ESC (TW-40A) ---
+// --- TW-40A #1 — Impeller, UI controlled (-100..100) ---
 Servo esc;
-const int escPin = 9;
-const int pwmMax = 2000;
+const int escPin    = 9;
+const int pwmMax    = 2000;
 const int pwmCenter = 1500;
+const int pwmMin    = 1000;
 int currentPWM = pwmCenter;
-int targetPower = 0;  // -100 עד 100, דינמי
+int targetPower = 0;
 
-// --- PWM VESC (On/Off) ---
+// --- VESC — Brush On/Off ---
 Servo vesc;
-const int vescPin = 10;   // פין חדש ל-VESC
+const int vescPin = 10;
 int vescPWM = pwmCenter;
 
-// --- חיישן מים ---
-const int WATER_SENSOR_PIN = 14; 
-const int LED_PIN = 13;          
+// --- TW-40A #2 & #3 — Maneuver motors, Arrow keys controlled ---
+// Left  = pin 6,  Right = pin 7
+// Differential steering mirrors the CAN motor logic:
+//   Arrow Up    → both forward
+//   Arrow Down  → both backward
+//   Arrow Left  → left backward,  right forward
+//   Arrow Right → left forward,   right backward
+Servo escManLeft;
+Servo escManRight;
+const int escManLeftPin  = 6;
+const int escManRightPin = 7;
+int manLeftPWM  = pwmCenter;
+int manRightPWM = pwmCenter;
+
+// Maneuver power: 0.0–1.0 (step 10%), default 50%
+float maneuverPower = 0.5;
+const float MAN_POWER_STEP = 0.1;
+
+// --- Water sensor ---
+const int WATER_SENSOR_PIN = 14;
+const int LED_PIN = 13;
 unsigned long lastWaterCheck = 0;
 const int WATER_THRESHOLD_LOW = 400;
 
-// --- חיישן מרחק UART ---
+// --- Distance sensor UART ---
 unsigned char distBuffer[4] = {0};
 int distIdx = 0;
 unsigned long lastDistCheck = 0;
 
-// --- פונקציה לשליחת RPM CAN ---
+// --- CAN RPM send ---
 void sendMotorRPM(uint32_t id, float rpm) {
   CAN_message_t msg;
-  msg.id = id | ((uint32_t)3 << 8); 
-  msg.flags.extended = 1; 
+  msg.id = id | ((uint32_t)3 << 8);
+  msg.flags.extended = 1;
   msg.len = 4;
   int32_t erpm = (int32_t)(rpm * POLE_PAIRS);
   msg.buf[0] = (erpm >> 24) & 0xFF;
@@ -53,15 +72,62 @@ void sendMotorRPM(uint32_t id, float rpm) {
   canBus.write(msg);
 }
 
-// --- פקודות מקלדת CAN ---
+// --- CAN motor commands — W/A/S/D ---
 void handleMotorCommands(char cmd) {
-  if (cmd == 'w') { leftTarget = currentMaxSpeed * leftDirection; rightTarget = currentMaxSpeed * rightDirection; }
+  if      (cmd == 'w') { leftTarget = currentMaxSpeed * leftDirection;  rightTarget = currentMaxSpeed * rightDirection; }
   else if (cmd == 's') { leftTarget = -currentMaxSpeed * leftDirection; rightTarget = -currentMaxSpeed * rightDirection; }
   else if (cmd == 'a') { leftTarget = -currentMaxSpeed * leftDirection; rightTarget = currentMaxSpeed * rightDirection; }
-  else if (cmd == 'd') { leftTarget = currentMaxSpeed * leftDirection; rightTarget = -currentMaxSpeed * rightDirection; }
+  else if (cmd == 'd') { leftTarget = currentMaxSpeed * leftDirection;  rightTarget = -currentMaxSpeed * rightDirection; }
   else if (cmd == 'x') { leftTarget = 0; rightTarget = 0; Serial.println(">>> CAN MOTORS STOPPED <<<"); }
-  else if (cmd == '+') { currentMaxSpeed += 200; Serial.print("Speed Up: "); Serial.println(currentMaxSpeed); }
-  else if (cmd == '-') { currentMaxSpeed -= 200; if(currentMaxSpeed < 0) currentMaxSpeed = 0; Serial.print("Speed Down: "); Serial.println(currentMaxSpeed); }
+  else if (cmd == '+') { currentMaxSpeed += 200; Serial.print("CAN Speed Up: "); Serial.println(currentMaxSpeed); }
+  else if (cmd == '-') { currentMaxSpeed -= 200; if (currentMaxSpeed < 0) currentMaxSpeed = 0; Serial.print("CAN Speed Down: "); Serial.println(currentMaxSpeed); }
+}
+
+// --- Maneuver ESC commands — Arrow keys (man_w/s/a/d/x) ---
+// Fully isolated from CAN motors.
+// Differential steering: left/right press spins opposite sides.
+void handleManeuverCommands(String cmd) {
+  int pwr = (int)(maneuverPower * (pwmMax - pwmCenter));  // offset from center
+
+  if (cmd == "man_w") {
+    // Both forward
+    manLeftPWM  = pwmCenter + pwr;
+    manRightPWM = pwmCenter + pwr;
+  }
+  else if (cmd == "man_s") {
+    // Both backward
+    manLeftPWM  = pwmCenter - pwr;
+    manRightPWM = pwmCenter - pwr;
+  }
+  else if (cmd == "man_a") {
+    // Turn left: left backward, right forward
+    manLeftPWM  = pwmCenter - pwr;
+    manRightPWM = pwmCenter + pwr;
+  }
+  else if (cmd == "man_d") {
+    // Turn right: left forward, right backward
+    manLeftPWM  = pwmCenter + pwr;
+    manRightPWM = pwmCenter - pwr;
+  }
+  else if (cmd == "man_x") {
+    manLeftPWM  = pwmCenter;
+    manRightPWM = pwmCenter;
+    Serial.println(">>> MANEUVER STOPPED <<<");
+  }
+  else if (cmd == "man_spd_up") {
+    maneuverPower += MAN_POWER_STEP;
+    if (maneuverPower > 1.0) maneuverPower = 1.0;
+    Serial.print("Maneuver Power: ");
+    Serial.print((int)(maneuverPower * 100));
+    Serial.println("%");
+  }
+  else if (cmd == "man_spd_down") {
+    maneuverPower -= MAN_POWER_STEP;
+    if (maneuverPower < 0.0) maneuverPower = 0.0;
+    Serial.print("Maneuver Power: ");
+    Serial.print((int)(maneuverPower * 100));
+    Serial.println("%");
+  }
 }
 
 void setup() {
@@ -69,36 +135,46 @@ void setup() {
   digitalWrite(LED_PIN, HIGH);
 
   Serial.begin(115200);
-  Serial1.begin(115200); // חיישן מרחק
+  Serial1.begin(115200);  // distance sensor
 
   canBus.begin();
   canBus.setBaudRate(1000000);
 
-  // --- אתחול ESC TW-40A ---
+  // TW-40A #1 — Impeller
   esc.attach(escPin, 1000, 2000);
-  esc.writeMicroseconds(pwmCenter); // התחלה במצב עצירה
-  delay(3000); 
+  esc.writeMicroseconds(pwmCenter);
+  delay(3000);
 
-  // --- אתחול VESC ---
+  // VESC — Brush
   vesc.attach(vescPin, 1000, 2000);
-  vesc.writeMicroseconds(pwmCenter); // עצירה
+  vesc.writeMicroseconds(pwmCenter);
   delay(1000);
+
+  // TW-40A #2 & #3 — Maneuver ESCs
+  escManLeft.attach(escManLeftPin, 1000, 2000);
+  escManLeft.writeMicroseconds(pwmCenter);
+  escManRight.attach(escManRightPin, 1000, 2000);
+  escManRight.writeMicroseconds(pwmCenter);
+  delay(2000);  // allow ESC arming
 
   digitalWrite(LED_PIN, LOW);
   Serial.println("--- System Ready ---");
-  Serial.println("Commands: 'vesc_on/vesc_off' = VESC, 'w/a/s/d/x' = CAN Motors, '-100..100' = TW-40A power");
+  Serial.println("W/A/S/D/X/+/-  = CAN motors");
+  Serial.println("man_w/s/a/d/x  = Maneuver ESCs (arrow keys)");
+  Serial.println("man_spd_up/dn  = Maneuver power (currently 50%)");
+  Serial.println("-100..100      = TW-40A Impeller");
+  Serial.println("brush_on/off   = Brush");
 }
 
 void loop() {
   unsigned long now = millis();
 
-  // --- 1. חיישן מרחק ---
-  if (now - lastDistCheck > 100) { 
+  // --- 1. Distance sensor ---
+  if (now - lastDistCheck > 100) {
     lastDistCheck = now;
-    while(Serial1.available()) Serial1.read();
+    while (Serial1.available()) Serial1.read();
     Serial1.write(0x55);
   }
-
   while (Serial1.available() > 0) {
     uint8_t b = Serial1.read();
     if (b == 0xFF) distIdx = 0;
@@ -113,26 +189,24 @@ void loop() {
     }
   }
 
-  // --- 2. חיישן מים ---
+  // --- 2. Water sensor ---
   if (now - lastWaterCheck > 500) {
     lastWaterCheck = now;
     int waterVal = analogRead(WATER_SENSOR_PIN);
     if (waterVal < WATER_THRESHOLD_LOW) {
       digitalWrite(LED_PIN, HIGH);
       Serial.println("Water!!!");
-
     } else {
       digitalWrite(LED_PIN, LOW);
     }
   }
 
- // --- 3. פקודות Serial ---
-if (Serial.available() > 0) {
+  // --- 3. Serial commands ---
+  if (Serial.available() > 0) {
     String input = Serial.readStringUntil('\n');
     input.trim();
     input.toLowerCase();
 
-    // --- Brush VESC (On/Off) ---
     if (input == "brush_on") {
       vescPWM = pwmMax;
       Serial.println("Brush Motor: ON (2000)");
@@ -141,18 +215,22 @@ if (Serial.available() > 0) {
       vescPWM = pwmCenter;
       Serial.println("Brush Motor: OFF (1500)");
     }
-    // --- CAN motors ---
+    // CAN motors: W/A/S/D/X/+/-
     else if (input.length() == 1 && (input[0] == 'w' || input[0] == 's' || input[0] == 'a' || input[0] == 'd' || input[0] == 'x' || input[0] == '+' || input[0] == '-')) {
       handleMotorCommands(input[0]);
     }
-    // --- TW-40A dynamic ---
+    // Maneuver ESCs: man_* commands
+    else if (input.startsWith("man_")) {
+      handleManeuverCommands(input);
+    }
+    // TW-40A Impeller: -100..100
     else {
       int power = input.toInt();
       targetPower = constrain(power, -100, 100);
     }
-}
+  }
 
-  // --- 4. עדכון ESC/TW-40A דינמי ---
+  // --- 4. TW-40A #1 Impeller (smooth ramp) ---
   if (targetPower == 0) {
     currentPWM = pwmCenter;
   } else {
@@ -161,10 +239,14 @@ if (Serial.available() > 0) {
   }
   esc.writeMicroseconds(currentPWM);
 
-  // --- 5. עדכון VESC ---
+  // --- 5. VESC Brush ---
   vesc.writeMicroseconds(vescPWM);
 
-  // --- 6. עדכון CAN ---
+  // --- 6. TW-40A #2 & #3 Maneuver ESCs ---
+  escManLeft.writeMicroseconds(manLeftPWM);
+  escManRight.writeMicroseconds(manRightPWM);
+
+  // --- 7. CAN motors ---
   sendMotorRPM(MOTOR_L, leftTarget);
   sendMotorRPM(MOTOR_R, rightTarget);
 

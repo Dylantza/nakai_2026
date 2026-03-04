@@ -50,6 +50,8 @@ state = {
     'water_value': 0,
     'distance_mm': 0,
     'teensy_connected': False,
+    'maneuver_direction': 'STOPPED',
+    'maneuver_power': 50,  # matches Teensy default (50%)
 }
 
 IMPELLER_STEP = 10
@@ -173,6 +175,19 @@ def on_command(data):
     elif cmd == 'brush':
         state['brush_on'] = not state['brush_on']
         send_serial('brush_on' if state['brush_on'] else 'brush_off')
+    elif cmd in ('man_w', 'man_s', 'man_a', 'man_d'):
+        man_dir_map = {'man_w': 'FORWARD', 'man_s': 'REVERSE', 'man_a': 'LEFT', 'man_d': 'RIGHT'}
+        state['maneuver_direction'] = man_dir_map[cmd]
+        send_serial(cmd)
+    elif cmd == 'man_x':
+        state['maneuver_direction'] = 'STOPPED'
+        send_serial('man_x')
+    elif cmd == 'man_spd_up':
+        state['maneuver_power'] = min(state['maneuver_power'] + 10, 100)
+        send_serial('man_spd_up')
+    elif cmd == 'man_spd_down':
+        state['maneuver_power'] = max(state['maneuver_power'] - 10, 0)
+        send_serial('man_spd_down')
 
     socketio.emit('state', state)
 
