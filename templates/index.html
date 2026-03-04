@@ -3,537 +3,356 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>ROV-1</title>
+<title>ROV·1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'system-ui', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace'],
+        }
+      }
+    }
+  }
+</script>
 <style>
-  :root {
-    --cyan:        #00d4ff;
-    --cyan-glow:   rgba(0,212,255,0.22);
-    --cyan-dim:    rgba(0,212,255,0.06);
-    --ok:          #00ffb3;
-    --ok-glow:     rgba(0,255,179,0.22);
-    --danger:      #ff2d55;
-    --danger-glow: rgba(255,45,85,0.22);
-    --warn:        #ffbb00;
-    --hi:          rgba(255,255,255,0.90);
-    --mid:         rgba(255,255,255,0.42);
-    --dim:         rgba(255,255,255,0.17);
-    --panel:       rgba(0,8,22,0.80);
-    --line:        rgba(255,255,255,0.06);
-    --fv:          'Share Tech Mono', 'Courier New', monospace;
-    --fu:          'Rajdhani', 'Arial Narrow', sans-serif;
-  }
-
-  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
-    width:100vw; height:100vh; overflow:hidden;
-    background:#000810;
-    -webkit-user-select:none; user-select:none;
-    cursor:crosshair;
+    width: 100vw; height: 100vh; overflow: hidden;
+    background: #000;
+    -webkit-user-select: none; user-select: none;
+    cursor: default;
   }
 
-  /* ─── CAMERA ─────────────────────────────────────────── */
-  #cam-feed {
-    position:fixed; inset:0;
-    width:100%; height:100%;
-    object-fit:cover; z-index:0;
-    display:block;
+  @keyframes livepulse  { 0%,100%{opacity:1} 50%{opacity:.15} }
+  @keyframes alertpulse { 0%,100%{opacity:1} 50%{opacity:.1}  }
+  @keyframes sblink     { 0%,100%{opacity:1} 50%{opacity:.05} }
+
+  .anim-live   { animation: livepulse 2.4s ease-in-out infinite; }
+  .anim-alert  { animation: alertpulse 0.75s ease-in-out infinite; }
+  .anim-blink  { animation: sblink 0.7s infinite; }
+
+  /* D-pad / action buttons */
+  .rov-btn {
+    transition: background 0.07s, border-color 0.07s, transform 0.07s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .rov-btn:hover  { background: rgba(255,255,255,0.07) !important; border-color: rgba(255,255,255,0.20) !important; }
+  .rov-btn:active, .rov-btn.pressed {
+    background: rgba(255,255,255,0.18) !important;
+    border-color: rgba(255,255,255,0.45) !important;
+    color: #fff !important;
+    transform: scale(0.90);
   }
 
-  /* ─── ATMOSPHERE ──────────────────────────────────────── */
-  .atm-grad {
-    position:fixed; inset:0; z-index:1; pointer-events:none;
-    background:
-      linear-gradient(to bottom,
-        rgba(0,8,22,0.80) 0%,
-        transparent 20%,
-        transparent 72%,
-        rgba(0,8,22,0.88) 100%),
-      linear-gradient(to right,
-        rgba(0,8,22,0.60) 0%,
-        transparent 24%,
-        transparent 76%,
-        rgba(0,8,22,0.60) 100%);
+  /* Stop buttons */
+  .rov-stop {
+    transition: background 0.07s, border-color 0.07s, transform 0.07s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
-  .atm-scan {
-    position:fixed; inset:0; z-index:2; pointer-events:none;
-    background:repeating-linear-gradient(
-      0deg, transparent 0, transparent 3px,
-      rgba(0,0,0,0.022) 3px, rgba(0,0,0,0.022) 4px
-    );
+  .rov-stop:hover  { background: rgba(239,68,68,0.18) !important; border-color: rgba(239,68,68,0.45) !important; }
+  .rov-stop:active, .rov-stop.pressed {
+    background: rgba(239,68,68,0.45) !important;
+    border-color: rgba(239,68,68,0.70) !important;
+    color: #fff !important;
+    transform: scale(0.90);
   }
 
-  /* ─── HUD ROOT ────────────────────────────────────────── */
-  .hud { position:fixed; inset:0; z-index:10; pointer-events:none; }
-  .hud > * { pointer-events:auto; }
-  .nop { pointer-events:none; }
-
-  /* ─── CORNER BRACKETS ─────────────────────────────────── */
-  .brk {
-    position:absolute; width:14px; height:14px;
-    border-color:var(--cyan); border-style:solid; border-width:0;
-    opacity:0.22;
-  }
-  .brk-tl { top:18px; left:18px; border-top-width:1px; border-left-width:1px; }
-  .brk-tr { top:18px; right:18px; border-top-width:1px; border-right-width:1px; }
-  .brk-bl { bottom:18px; left:18px; border-bottom-width:1px; border-left-width:1px; }
-  .brk-br { bottom:18px; right:18px; border-bottom-width:1px; border-right-width:1px; }
-
-  /* ─── CROSSHAIR ───────────────────────────────────────── */
-  .xhair {
-    position:absolute; top:50%; left:50%;
-    transform:translate(-50%,-50%);
-    width:16px; height:16px; opacity:0.28;
-  }
-  .xhair::before {
-    content:''; position:absolute;
-    top:50%; left:0; right:0; height:1px;
-    background:var(--cyan); transform:translateY(-50%);
-  }
-  .xhair::after {
-    content:''; position:absolute;
-    left:50%; top:0; bottom:0; width:1px;
-    background:var(--cyan); transform:translateX(-50%);
-  }
-  .xhair-dot {
-    position:absolute; top:50%; left:50%;
-    transform:translate(-50%,-50%);
-    width:2px; height:2px; border-radius:50%;
-    background:var(--cyan);
-    box-shadow:0 0 8px var(--cyan);
-    opacity:2; /* browsers cap at 1 */
+  /* Brush active state */
+  .brush-active {
+    background: rgba(52,211,153,0.10) !important;
+    border-color: rgba(52,211,153,0.35) !important;
+    color: rgb(52,211,153) !important;
   }
 
-  /* ─── TOP BAR ─────────────────────────────────────────── */
-  .top-bar {
-    position:absolute; top:0; left:0; right:0; height:48px;
-    display:flex; align-items:center;
-    padding:0 26px;
-  }
-
-  .rov-id {
-    font-family:var(--fv);
-    font-size:11px; letter-spacing:8px;
-    color:var(--cyan);
-    text-shadow:0 0 24px var(--cyan-glow);
-  }
-
-  .dir-badge {
-    position:absolute; left:50%; transform:translateX(-50%);
-    font-family:var(--fu); font-size:10px; font-weight:400; letter-spacing:6px;
-    text-transform:uppercase; color:var(--dim);
-    transition:color .22s, text-shadow .22s;
-    white-space:nowrap;
-  }
-  .dir-badge.forward { color:var(--ok);  text-shadow:0 0 18px var(--ok-glow); }
-  .dir-badge.reverse { color:var(--cyan); text-shadow:0 0 18px var(--cyan-glow); }
-  .dir-badge.left,
-  .dir-badge.right   { color:rgba(255,255,255,.60); }
-
-  .top-right {
-    margin-left:auto; display:flex; align-items:center; gap:18px;
-  }
-  .live-dot {
-    width:4px; height:4px; border-radius:50%;
-    background:var(--ok); box-shadow:0 0 8px var(--ok);
-    animation:ldpulse 2.6s ease-in-out infinite;
-  }
-  @keyframes ldpulse { 0%,100%{opacity:1} 50%{opacity:.18} }
-
-  .snap-link {
-    font-family:var(--fu); font-size:8px; font-weight:400; letter-spacing:4px;
-    color:var(--dim); text-decoration:none; transition:color .18s;
-  }
-  .snap-link:hover { color:var(--cyan); }
-
-  /* ─── WATER WARNING ───────────────────────────────────── */
-  .water-overlay {
-    position:absolute; top:48px; left:0; right:0;
-    background:rgba(255,45,85,.07);
-    border-bottom:1px solid rgba(255,45,85,.28);
-    padding:5px 0; text-align:center;
-    font-family:var(--fu); font-size:8px; font-weight:500; letter-spacing:7px;
-    color:var(--danger); display:none; pointer-events:none;
-    animation:wblink .65s ease-in-out infinite;
-  }
-  .water-overlay.show { display:block; }
-  @keyframes wblink { 0%,100%{opacity:1} 50%{opacity:.08} }
-
-  /* ─── LEFT PANEL ──────────────────────────────────────── */
-  .left-panel {
-    position:absolute; left:0; top:50%; transform:translateY(-50%);
-    padding:0 34px;
-    display:flex; flex-direction:column; gap:38px;
-  }
-
-  /* ─── RIGHT PANEL ─────────────────────────────────────── */
-  .right-panel {
-    position:absolute; right:0; top:50%; transform:translateY(-50%);
-    padding:0 34px;
-    display:flex; flex-direction:column; gap:38px;
-    text-align:right;
-  }
-
-  /* ─── DATA BLOCK ──────────────────────────────────────── */
-  .db-lbl {
-    font-family:var(--fu); font-size:7px; font-weight:400; letter-spacing:4px;
-    color:var(--dim); text-transform:uppercase; margin-bottom:5px;
-  }
-  .db-val {
-    font-family:var(--fv); font-size:32px; line-height:1;
-    color:var(--hi); transition:color .22s, text-shadow .22s;
-  }
-  .db-val.accent { color:var(--cyan);   text-shadow:0 0 28px var(--cyan-glow); }
-  .db-val.ok     { color:var(--ok);     text-shadow:0 0 24px var(--ok-glow); }
-  .db-val.danger { color:var(--danger); text-shadow:0 0 22px var(--danger-glow); }
-  .db-val.warn   { color:var(--warn); }
-  .db-val.dim    { color:var(--dim); text-shadow:none; }
-
-  .db-unit {
-    font-family:var(--fu); font-size:8px; font-weight:300; letter-spacing:3px;
-    color:var(--dim); margin-top:4px;
-  }
-  .db-sub {
-    font-family:var(--fu); font-size:9px; font-weight:300; letter-spacing:2px;
-    color:var(--dim); margin-top:4px;
-  }
-
-  /* ─── THIN BAR ────────────────────────────────────────── */
-  .thin-bar {
-    height:1px; background:var(--line);
-    position:relative; overflow:visible; margin-top:10px;
-  }
-  .thin-bar-fill {
-    position:absolute; top:0; left:0; height:100%;
-    background:var(--cyan); box-shadow:0 0 8px var(--cyan-glow);
-    transition:width .2s;
-  }
-  .thin-bar-fill.g { background:var(--ok);     box-shadow:0 0 8px var(--ok-glow); }
-  .thin-bar-fill.r { background:var(--danger);  box-shadow:0 0 8px var(--danger-glow); }
-
-  /* ─── SPLIT BAR (impeller) ────────────────────────────── */
-  .split-bar {
-    height:1px; background:var(--line);
-    position:relative; overflow:visible; margin-top:10px;
-  }
-  .split-bar-mid {
-    position:absolute; left:50%; top:-4px; bottom:-4px;
-    width:1px; background:rgba(255,255,255,.10);
-  }
-  .split-bar-fill {
-    position:absolute; top:0; height:100%;
-    transition:all .15s;
-  }
-
-  /* ─── SYSTEMS BLOCK ───────────────────────────────────── */
-  .sys-rows { display:flex; flex-direction:column; gap:9px; }
-  .sys-row  { display:flex; align-items:baseline; gap:12px; justify-content:flex-end; }
-  .sys-lbl  {
-    font-family:var(--fu); font-size:7px; font-weight:400; letter-spacing:4px;
-    color:var(--dim); text-transform:uppercase;
-  }
-  .sys-val {
-    font-family:var(--fv); font-size:13px; letter-spacing:1px;
-    color:var(--dim); transition:color .2s, text-shadow .2s;
-  }
-  .sys-val.ok     { color:var(--ok);     text-shadow:0 0 12px var(--ok-glow); }
-  .sys-val.danger { color:var(--danger); text-shadow:0 0 12px var(--danger-glow); }
-  .sys-val.accent { color:var(--cyan);   text-shadow:0 0 12px var(--cyan-glow); }
-  @keyframes sblink { 0%,100%{opacity:1} 50%{opacity:.08} }
-  .sys-val.blink  { animation:sblink .65s infinite; }
-
-  /* ─── BOTTOM BAR ──────────────────────────────────────── */
-  .bottom-bar {
-    position:absolute; bottom:0; left:0; right:0;
-    padding:16px 26px 22px;
-    display:flex; align-items:center; justify-content:space-between; gap:16px;
-    min-height:110px;
-  }
-
-  /* vertical separator */
-  .vsep {
-    width:1px; height:56px; flex-shrink:0;
-    background:linear-gradient(to bottom, transparent, var(--line), transparent);
-  }
-
-  /* D-PAD */
-  .dpad {
-    display:grid;
-    grid-template-columns:repeat(3, 46px);
-    grid-template-rows:repeat(3, 46px);
-    gap:3px; flex-shrink:0;
-  }
-  .dc { display:flex; align-items:center; justify-content:center; }
-
-  .btn {
-    width:100%; height:100%;
-    background:rgba(0,8,22,.55);
-    color:var(--dim);
-    border:1px solid rgba(255,255,255,.07);
-    border-radius:1px;
-    font-family:var(--fv); font-size:11px;
-    cursor:pointer;
-    display:flex; align-items:center; justify-content:center;
-    transition:all .09s;
-    touch-action:manipulation;
-    -webkit-tap-highlight-color:transparent;
-    backdrop-filter:blur(6px);
-    -webkit-backdrop-filter:blur(6px);
-  }
-  .btn:hover {
-    color:var(--cyan); border-color:rgba(0,212,255,.24);
-    background:rgba(0,212,255,.05);
-  }
-  .btn:active, .btn.pressed {
-    background:rgba(0,212,255,.12);
-    border-color:rgba(0,212,255,.48);
-    color:var(--cyan);
-    box-shadow:0 0 16px var(--cyan-glow), inset 0 0 8px rgba(0,212,255,.07);
-  }
-  .btn.e-stop {
-    background:rgba(255,45,85,.04);
-    border-color:rgba(255,45,85,.12);
-    color:rgba(255,45,85,.32);
-    font-size:7px; letter-spacing:2px;
-    font-family:var(--fu); font-weight:500;
-  }
-  .btn.e-stop:hover { color:var(--danger); border-color:rgba(255,45,85,.32); }
-  .btn.e-stop:active, .btn.e-stop.pressed {
-    background:rgba(255,45,85,.14); border-color:rgba(255,45,85,.52);
-    color:var(--danger); box-shadow:0 0 16px var(--danger-glow);
-  }
-
-  /* BOTTOM METERS */
-  .bottom-meters {
-    flex:1; max-width:195px;
-    display:flex; flex-direction:column; gap:15px;
-  }
-  .bm-row { display:flex; flex-direction:column; gap:6px; }
-  .bm-head { display:flex; justify-content:space-between; align-items:baseline; }
-  .bm-lbl {
-    font-family:var(--fu); font-size:7px; font-weight:400; letter-spacing:4px;
-    color:var(--dim); text-transform:uppercase;
-  }
-  .bm-val {
-    font-family:var(--fv); font-size:10px; letter-spacing:1px; color:var(--mid);
-  }
-
-  /* SIDE BUTTONS */
-  .side-btns {
-    display:grid;
-    grid-template-columns:62px 62px;
-    grid-template-rows:repeat(3, 31px);
-    gap:3px; flex-shrink:0;
-  }
-  .sbtn {
-    background:rgba(0,8,22,.50);
-    color:var(--dim);
-    border:1px solid rgba(255,255,255,.06);
-    border-radius:1px;
-    font-family:var(--fu); font-size:8px; font-weight:500; letter-spacing:2px;
-    text-transform:uppercase; cursor:pointer;
-    display:flex; align-items:center; justify-content:center;
-    transition:all .09s;
-    touch-action:manipulation;
-    -webkit-tap-highlight-color:transparent;
-    backdrop-filter:blur(6px);
-    -webkit-backdrop-filter:blur(6px);
-  }
-  .sbtn:hover { color:var(--cyan); border-color:rgba(0,212,255,.20); background:rgba(0,212,255,.04); }
-  .sbtn:active {
-    background:rgba(0,212,255,.10); border-color:rgba(0,212,255,.40);
-    color:var(--cyan); box-shadow:0 0 12px var(--cyan-glow);
-  }
-  .sbtn.imp-stop { border-color:rgba(255,45,85,.10); color:rgba(255,45,85,.28); }
-  .sbtn.imp-stop:hover { color:var(--danger); border-color:rgba(255,45,85,.28); }
-  .sbtn.imp-stop:active {
-    background:rgba(255,45,85,.10); border-color:rgba(255,45,85,.42);
-    color:var(--danger); box-shadow:0 0 12px var(--danger-glow);
-  }
-  .sbtn.brush-on {
-    color:var(--ok); border-color:rgba(0,255,179,.22);
-    background:rgba(0,255,179,.04); text-shadow:0 0 10px var(--ok-glow);
-  }
-
-  /* KB HINT */
-  .kb-hint {
-    position:absolute; bottom:124px; left:50%; transform:translateX(-50%);
-    font-family:var(--fu); font-size:7px; letter-spacing:3px;
-    color:rgba(255,255,255,.09); white-space:nowrap;
-  }
+  /* Track bars */
+  .t-fill   { transition: width 0.18s ease; }
+  .sp-fill  { transition: width 0.14s ease, left 0.14s ease; }
 </style>
 </head>
-<body>
+<body class="font-sans">
 
-<img id="cam-feed" src="/video_feed" alt="">
-<div class="atm-grad"></div>
-<div class="atm-scan"></div>
+<!-- Camera -->
+<img id="cam" class="fixed inset-0 w-full h-full object-cover z-0" src="/video_feed" alt="">
 
-<div class="hud">
+<!-- Vignette -->
+<div class="fixed inset-0 z-[1] pointer-events-none"
+     style="background:linear-gradient(to bottom, transparent 28%, rgba(0,0,0,0.60) 100%)"></div>
 
-  <!-- corner brackets -->
-  <div class="brk brk-tl nop"></div>
-  <div class="brk brk-tr nop"></div>
-  <div class="brk brk-bl nop"></div>
-  <div class="brk brk-br nop"></div>
+<!-- ══════════════════════════════════════════════════════════
+     HUD
+══════════════════════════════════════════════════════════ -->
+<div class="fixed inset-0 z-10 pointer-events-none">
 
-  <!-- crosshair -->
-  <div class="xhair nop"><div class="xhair-dot"></div></div>
-
-  <!-- top bar -->
-  <div class="top-bar">
-    <div class="rov-id">ROV·1</div>
-    <div class="dir-badge nop" id="dir-badge">■&nbsp;&nbsp;STOPPED</div>
-    <div class="top-right">
-      <div class="live-dot nop"></div>
-      <a class="snap-link" href="/snapshot" target="_blank">SNAP</a>
+  <!-- ─── TOP STATUS ──────────────────────────────────────── -->
+  <div class="absolute top-5 left-1/2 -translate-x-1/2 flex items-center gap-4">
+    <span class="font-mono text-[10px] tracking-[6px] uppercase text-white/60">ROV·1</span>
+    <span class="w-px h-3 bg-white/15 rounded-full"></span>
+    <span id="dir-badge"
+          class="font-sans text-[9px] font-semibold tracking-[3px] uppercase text-white/35 transition-colors duration-200">
+      ■&nbsp;&nbsp;STOPPED
+    </span>
+    <span class="w-px h-3 bg-white/15 rounded-full"></span>
+    <div class="flex items-center gap-1.5">
+      <span class="anim-live w-[6px] h-[6px] rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0"></span>
+      <span class="font-sans text-[8px] font-semibold tracking-[3px] uppercase text-emerald-400">LIVE</span>
     </div>
   </div>
 
-  <!-- water warning -->
-  <div class="water-overlay nop" id="water-overlay">WATER INGRESS DETECTED</div>
-
-  <!-- LEFT PANEL -->
-  <div class="left-panel nop">
-
-    <div>
-      <div class="db-lbl">RANGE</div>
-      <div class="db-val dim" id="range-val">---</div>
-      <div class="db-unit">MM</div>
+  <!-- ─── WATER ALERT ─────────────────────────────────────── -->
+  <div id="water-alert"
+       class="hidden absolute top-14 left-1/2 -translate-x-1/2 anim-alert">
+    <div class="flex items-center gap-2 px-4 py-1.5 rounded-full
+                bg-red-500/[0.12] border border-red-500/30">
+      <span class="w-[5px] h-[5px] rounded-full bg-red-400 shadow-[0_0_7px_rgba(248,113,113,0.9)] shrink-0"></span>
+      <span class="font-sans text-[8px] font-semibold tracking-[5px] uppercase text-red-400">Water Ingress</span>
     </div>
-
-    <div>
-      <div class="db-lbl">SPEED</div>
-      <div class="db-val accent" id="spd-big">5</div>
-      <div class="db-unit" id="spd-max-lbl">OF 10</div>
-      <div class="thin-bar" style="width:70px">
-        <div class="thin-bar-fill g" id="spd-bar" style="width:50%"></div>
-      </div>
-    </div>
-
   </div>
 
-  <!-- RIGHT PANEL -->
-  <div class="right-panel nop">
+  <!-- ─── LEFT PANEL ──────────────────────────────────────── -->
+  <div class="absolute left-7 bottom-[215px] w-40 space-y-7">
 
     <div>
-      <div class="db-lbl">IMPELLER</div>
-      <div class="db-val dim" id="imp-pwr">0%</div>
-      <div class="db-sub" id="imp-pwm">PWM · 1500</div>
-      <div class="split-bar" style="width:70px;margin-left:auto">
-        <div class="split-bar-mid"></div>
-        <div class="split-bar-fill" id="imp-bar"
-             style="width:0%;left:50%;background:var(--ok);box-shadow:0 0 8px var(--ok-glow)"></div>
-      </div>
+      <span class="block font-sans text-[8px] font-semibold tracking-[5px] uppercase text-white/35 mb-1.5">Range</span>
+      <span id="range-val" class="block font-mono text-5xl leading-none tracking-tight text-white/20">---</span>
+      <span class="block font-sans text-[9px] font-medium tracking-[2px] uppercase text-white/22 mt-1">mm</span>
     </div>
 
     <div>
-      <div class="db-lbl" style="margin-bottom:10px">SYSTEMS</div>
-      <div class="sys-rows">
-        <div class="sys-row">
-          <span class="sys-lbl">BRUSH</span>
-          <span class="sys-val dim" id="hud-brush">OFF</span>
-        </div>
-        <div class="sys-row">
-          <span class="sys-lbl">H2O</span>
-          <span class="sys-val ok" id="hud-water">OK</span>
-        </div>
-        <div class="sys-row">
-          <span class="sys-lbl">TEENSY</span>
-          <span class="sys-val dim" id="hud-teensy">---</span>
-        </div>
+      <span class="block font-sans text-[8px] font-semibold tracking-[5px] uppercase text-white/35 mb-1.5">Speed</span>
+      <span id="spd-big" class="block font-mono text-5xl leading-none tracking-tight text-blue-300/90">5</span>
+      <span id="spd-max-lbl" class="block font-sans text-[9px] font-medium tracking-[2px] uppercase text-white/28 mt-1">of 10</span>
+      <div class="relative mt-2.5 h-[2px] rounded-full bg-white/[0.09] overflow-hidden">
+        <div id="spd-bar" class="t-fill absolute inset-y-0 left-0 rounded-full bg-emerald-400/65" style="width:50%"></div>
       </div>
     </div>
 
   </div>
 
-  <!-- kb hint -->
-  <div class="kb-hint nop">WASD · ±SPD · ↑↓ IMP · 0 IMP-STOP · B BRUSH · X E-STOP</div>
+  <!-- ─── RIGHT PANEL ─────────────────────────────────────── -->
+  <div class="absolute right-7 bottom-[215px] w-44 space-y-7 text-right">
 
-  <!-- bottom bar -->
-  <div class="bottom-bar">
-
-    <!-- d-pad -->
-    <div class="dpad">
-      <div class="dc"></div>
-      <div class="dc">
-        <button class="btn" id="btn-w"
-          ontouchstart="pressDir('w')" ontouchend="releaseDir('w')"
-          onmousedown="pressDir('w')" onmouseup="releaseDir('w')" onmouseleave="releaseDir('w')">▲</button>
+    <div>
+      <span class="block font-sans text-[8px] font-semibold tracking-[5px] uppercase text-white/35 mb-1.5">Impeller</span>
+      <span id="imp-pwr" class="block font-mono text-5xl leading-none tracking-tight text-white/20">0%</span>
+      <span id="imp-pwm" class="block font-sans text-[9px] font-medium tracking-[1px] uppercase text-white/22 mt-1">PWM · 1500</span>
+      <div class="relative mt-2.5 h-[2px] rounded-full bg-white/[0.09]">
+        <div class="absolute top-1/2 left-1/2 w-px h-3 -translate-y-1/2 bg-white/15"></div>
+        <div id="imp-bar" class="sp-fill absolute inset-y-0 rounded-full"
+             style="width:0%;left:50%;background:rgba(52,211,153,0.70)"></div>
       </div>
-      <div class="dc"></div>
-      <div class="dc">
-        <button class="btn" id="btn-a"
-          ontouchstart="pressDir('a')" ontouchend="releaseDir('a')"
-          onmousedown="pressDir('a')" onmouseup="releaseDir('a')" onmouseleave="releaseDir('a')">◀</button>
-      </div>
-      <div class="dc">
-        <button class="btn e-stop" id="btn-x"
-          onmousedown="sendCmd('x')" ontouchstart="sendCmd('x')">STOP</button>
-      </div>
-      <div class="dc">
-        <button class="btn" id="btn-d"
-          ontouchstart="pressDir('d')" ontouchend="releaseDir('d')"
-          onmousedown="pressDir('d')" onmouseup="releaseDir('d')" onmouseleave="releaseDir('d')">▶</button>
-      </div>
-      <div class="dc"></div>
-      <div class="dc">
-        <button class="btn" id="btn-s"
-          ontouchstart="pressDir('s')" ontouchend="releaseDir('s')"
-          onmousedown="pressDir('s')" onmouseup="releaseDir('s')" onmouseleave="releaseDir('s')">▼</button>
-      </div>
-      <div class="dc"></div>
     </div>
 
-    <div class="vsep nop"></div>
-
-    <!-- meters -->
-    <div class="bottom-meters">
-      <div class="bm-row">
-        <div class="bm-head">
-          <span class="bm-lbl">SPD</span>
-          <span class="bm-val" id="spd-val">5 / 10</span>
+    <div>
+      <span class="block font-sans text-[8px] font-semibold tracking-[5px] uppercase text-white/35 mb-3">Systems</span>
+      <div class="space-y-[10px]">
+        <div class="flex justify-between items-baseline">
+          <span class="font-sans text-[7px] font-semibold tracking-[4px] uppercase text-white/35">Brush</span>
+          <span id="hud-brush" class="font-mono text-[11px] text-white/22">OFF</span>
         </div>
-        <div class="thin-bar">
-          <div class="thin-bar-fill g" id="spd-bar2" style="width:50%"></div>
+        <div class="flex justify-between items-baseline">
+          <span class="font-sans text-[7px] font-semibold tracking-[4px] uppercase text-white/35">H₂O</span>
+          <span id="hud-water" class="font-mono text-[11px] text-emerald-400">OK</span>
         </div>
-      </div>
-      <div class="bm-row">
-        <div class="bm-head">
-          <span class="bm-lbl">IMP</span>
-          <span class="bm-val" id="imp-val">0%</span>
+        <div class="flex justify-between items-baseline">
+          <span class="font-sans text-[7px] font-semibold tracking-[4px] uppercase text-white/35">Teensy</span>
+          <span id="hud-teensy" class="font-mono text-[11px] text-white/22">---</span>
         </div>
-        <div class="split-bar">
-          <div class="split-bar-mid"></div>
-          <div class="split-bar-fill" id="imp-bar2"
-               style="width:0%;left:50%;background:var(--ok);box-shadow:0 0 8px var(--ok-glow)"></div>
+        <div class="flex justify-between items-baseline">
+          <span class="font-sans text-[7px] font-semibold tracking-[4px] uppercase text-white/35">Maneuver</span>
+          <span id="hud-man-dir" class="font-mono text-[11px] text-white/22">STOPPED</span>
         </div>
-      </div>
-      <div class="bm-row">
-        <div class="bm-head">
-          <span class="bm-lbl">PWR</span>
-          <span class="bm-val" id="rdp-val">0%</span>
-        </div>
-        <div class="thin-bar">
-          <div class="thin-bar-fill" id="rdp-bar" style="width:0%"></div>
+        <div class="flex justify-between items-baseline">
+          <span class="font-sans text-[7px] font-semibold tracking-[4px] uppercase text-white/35">Man Pwr</span>
+          <span id="hud-man-pwr" class="font-mono text-[11px] text-emerald-400">50%</span>
         </div>
       </div>
     </div>
 
-    <div class="vsep nop"></div>
+  </div>
 
-    <!-- side buttons -->
-    <div class="side-btns">
-      <button class="sbtn" onmousedown="sendCmd('+')"        ontouchstart="sendCmd('+')">SPD +</button>
-      <button class="sbtn" onmousedown="sendCmd('imp_up')"   ontouchstart="sendCmd('imp_up')">IMP +</button>
-      <button class="sbtn" onmousedown="sendCmd('-')"        ontouchstart="sendCmd('-')">SPD −</button>
-      <button class="sbtn" onmousedown="sendCmd('imp_down')" ontouchstart="sendCmd('imp_down')">IMP −</button>
-      <button class="sbtn imp-stop" onmousedown="sendCmd('imp_stop')" ontouchstart="sendCmd('imp_stop')">IMP 0</button>
-      <button class="sbtn" id="brush-btn" onmousedown="sendCmd('brush')" ontouchstart="sendCmd('brush')">BRUSH</button>
+  <!-- ─── SNAP BUTTON ─────────────────────────────────────── -->
+  <a href="/snapshot" target="_blank"
+     class="absolute bottom-7 left-7 pointer-events-auto w-14 h-14 rounded-full
+            border-2 border-white/45 flex items-center justify-center
+            hover:border-white/75 transition-colors cursor-pointer">
+    <div class="w-10 h-10 rounded-full bg-red-500
+                shadow-[0_0_14px_rgba(239,68,68,0.55)]
+                hover:bg-red-400 active:scale-[0.88]
+                transition-all duration-100"></div>
+  </a>
+
+  <!-- ─── KB HINT ──────────────────────────────────────────── -->
+  <div class="absolute bottom-[206px] left-1/2 -translate-x-1/2
+              font-sans text-[6px] tracking-[3px] uppercase text-white/[0.08] whitespace-nowrap">
+    WASD · ±SPD · ARROWS MANEUVER · 0 IMP-STOP · B BRUSH · X E-STOP
+  </div>
+
+  <!-- ─── BOTTOM CONTROL BAR ──────────────────────────────── -->
+  <div class="absolute bottom-5 left-1/2 -translate-x-1/2 pointer-events-auto">
+    <div class="flex items-center
+                px-3 py-3 gap-0
+                rounded-2xl
+                bg-black/82 backdrop-blur-2xl
+                border border-white/[0.07]
+                shadow-[0_8px_40px_rgba(0,0,0,0.70)]">
+
+      <!-- ════ WASD D-PAD ════ -->
+      <div class="px-4 flex flex-col items-center gap-1.5">
+        <div class="grid gap-[5px]" style="grid-template-columns:repeat(3,42px);grid-template-rows:repeat(3,42px)">
+          <div></div>
+          <button id="btn-w" class="rov-btn rounded-xl bg-white/[0.045] border border-white/[0.10]
+                                    text-white/70 text-[15px] flex items-center justify-center"
+            ontouchstart="pressDir('w')" ontouchend="releaseDir('w')"
+            onmousedown="pressDir('w')"  onmouseup="releaseDir('w')" onmouseleave="releaseDir('w')">▲</button>
+          <div></div>
+          <button id="btn-a" class="rov-btn rounded-xl bg-white/[0.045] border border-white/[0.10]
+                                    text-white/70 text-[15px] flex items-center justify-center"
+            ontouchstart="pressDir('a')" ontouchend="releaseDir('a')"
+            onmousedown="pressDir('a')"  onmouseup="releaseDir('a')" onmouseleave="releaseDir('a')">◀</button>
+          <button id="btn-x" class="rov-stop rounded-xl bg-red-500/[0.08] border border-red-500/[0.20]
+                                    text-red-400/75 font-sans text-[6.5px] font-semibold tracking-[2px]
+                                    uppercase flex items-center justify-center"
+            onmousedown="sendCmd('x')" ontouchstart="sendCmd('x')">STOP</button>
+          <button id="btn-d" class="rov-btn rounded-xl bg-white/[0.045] border border-white/[0.10]
+                                    text-white/70 text-[15px] flex items-center justify-center"
+            ontouchstart="pressDir('d')" ontouchend="releaseDir('d')"
+            onmousedown="pressDir('d')"  onmouseup="releaseDir('d')" onmouseleave="releaseDir('d')">▶</button>
+          <div></div>
+          <button id="btn-s" class="rov-btn rounded-xl bg-white/[0.045] border border-white/[0.10]
+                                    text-white/70 text-[15px] flex items-center justify-center"
+            ontouchstart="pressDir('s')" ontouchend="releaseDir('s')"
+            onmousedown="pressDir('s')"  onmouseup="releaseDir('s')" onmouseleave="releaseDir('s')">▼</button>
+          <div></div>
+        </div>
+        <span class="font-sans text-[6.5px] tracking-[3px] uppercase text-white/18">DRIVE</span>
+      </div>
+
+      <div class="w-px h-[52px] bg-white/[0.07] mx-1 self-center"></div>
+
+      <!-- ════ MANEUVER ARROW D-PAD ════ -->
+      <div class="px-4 flex flex-col items-center gap-1.5">
+        <div class="grid gap-[5px]" style="grid-template-columns:repeat(3,42px);grid-template-rows:repeat(3,42px)">
+          <div></div>
+          <button id="btn-man-w" class="rov-btn rounded-xl bg-white/[0.045] border border-white/[0.10]
+                                        text-white/70 text-[15px] flex items-center justify-center"
+            ontouchstart="pressMan('man_w')" ontouchend="releaseMan('man_w')"
+            onmousedown="pressMan('man_w')"  onmouseup="releaseMan('man_w')" onmouseleave="releaseMan('man_w')">↑</button>
+          <div></div>
+          <button id="btn-man-a" class="rov-btn rounded-xl bg-white/[0.045] border border-white/[0.10]
+                                        text-white/70 text-[15px] flex items-center justify-center"
+            ontouchstart="pressMan('man_a')" ontouchend="releaseMan('man_a')"
+            onmousedown="pressMan('man_a')"  onmouseup="releaseMan('man_a')" onmouseleave="releaseMan('man_a')">←</button>
+          <button id="btn-man-x" class="rov-stop rounded-xl bg-red-500/[0.08] border border-red-500/[0.20]
+                                        text-red-400/75 font-sans text-[6.5px] font-semibold tracking-[2px]
+                                        uppercase flex items-center justify-center"
+            onmousedown="sendCmd('man_x')" ontouchstart="sendCmd('man_x')">STOP</button>
+          <button id="btn-man-d" class="rov-btn rounded-xl bg-white/[0.045] border border-white/[0.10]
+                                        text-white/70 text-[15px] flex items-center justify-center"
+            ontouchstart="pressMan('man_d')" ontouchend="releaseMan('man_d')"
+            onmousedown="pressMan('man_d')"  onmouseup="releaseMan('man_d')" onmouseleave="releaseMan('man_d')">→</button>
+          <div></div>
+          <button id="btn-man-s" class="rov-btn rounded-xl bg-white/[0.045] border border-white/[0.10]
+                                        text-white/70 text-[15px] flex items-center justify-center"
+            ontouchstart="pressMan('man_s')" ontouchend="releaseMan('man_s')"
+            onmousedown="pressMan('man_s')"  onmouseup="releaseMan('man_s')" onmouseleave="releaseMan('man_s')">↓</button>
+          <div></div>
+        </div>
+        <span class="font-sans text-[6.5px] tracking-[3px] uppercase text-white/18">MANEUVER</span>
+      </div>
+
+      <div class="w-px h-[52px] bg-white/[0.07] mx-1 self-center"></div>
+
+      <!-- ════ METERS ════ -->
+      <div class="px-5 space-y-[13px]" style="width:188px">
+        <!-- Speed -->
+        <div>
+          <div class="flex justify-between items-baseline mb-[5px]">
+            <span class="font-sans text-[7px] font-semibold tracking-[4px] uppercase text-white/35">Speed</span>
+            <span id="spd-val" class="font-mono text-[10px] text-white/65">5 / 10</span>
+          </div>
+          <div class="relative h-[2px] rounded-full bg-white/[0.09] overflow-hidden">
+            <div id="spd-bar2" class="t-fill absolute inset-y-0 left-0 rounded-full bg-emerald-400/65" style="width:50%"></div>
+          </div>
+        </div>
+        <!-- Impeller -->
+        <div>
+          <div class="flex justify-between items-baseline mb-[5px]">
+            <span class="font-sans text-[7px] font-semibold tracking-[4px] uppercase text-white/35">Impeller</span>
+            <span id="imp-val" class="font-mono text-[10px] text-white/65">0%</span>
+          </div>
+          <div class="relative h-[2px] rounded-full bg-white/[0.09]">
+            <div class="absolute top-1/2 left-1/2 w-px h-3 -translate-y-1/2 bg-white/12"></div>
+            <div id="imp-bar2" class="sp-fill absolute inset-y-0 rounded-full"
+                 style="width:0%;left:50%;background:rgba(52,211,153,0.70)"></div>
+          </div>
+        </div>
+        <!-- Power -->
+        <div>
+          <div class="flex justify-between items-baseline mb-[5px]">
+            <span class="font-sans text-[7px] font-semibold tracking-[4px] uppercase text-white/35">Power</span>
+            <span id="rdp-val" class="font-mono text-[10px] text-white/65">0%</span>
+          </div>
+          <div class="relative h-[2px] rounded-full bg-white/[0.09] overflow-hidden">
+            <div id="rdp-bar" class="t-fill absolute inset-y-0 left-0 rounded-full bg-white/35" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="w-px h-[52px] bg-white/[0.07] mx-1 self-center"></div>
+
+      <!-- ════ ACTION BUTTONS ════ -->
+      <div class="px-4 grid grid-cols-2 gap-[5px]"
+           style="grid-template-rows:repeat(4,30px);width:134px">
+        <button class="rov-btn rounded-lg bg-white/[0.04] border border-white/[0.09]
+                       font-sans text-[7px] font-semibold tracking-[1.5px] uppercase
+                       text-white/60 flex items-center justify-center"
+          onmousedown="sendCmd('+')" ontouchstart="sendCmd('+')">SPD +</button>
+        <button class="rov-btn rounded-lg bg-white/[0.04] border border-white/[0.09]
+                       font-sans text-[7px] font-semibold tracking-[1.5px] uppercase
+                       text-white/60 flex items-center justify-center"
+          onmousedown="sendCmd('imp_up')" ontouchstart="sendCmd('imp_up')">IMP +</button>
+
+        <button class="rov-btn rounded-lg bg-white/[0.04] border border-white/[0.09]
+                       font-sans text-[7px] font-semibold tracking-[1.5px] uppercase
+                       text-white/60 flex items-center justify-center"
+          onmousedown="sendCmd('-')" ontouchstart="sendCmd('-')">SPD −</button>
+        <button class="rov-btn rounded-lg bg-white/[0.04] border border-white/[0.09]
+                       font-sans text-[7px] font-semibold tracking-[1.5px] uppercase
+                       text-white/60 flex items-center justify-center"
+          onmousedown="sendCmd('imp_down')" ontouchstart="sendCmd('imp_down')">IMP −</button>
+
+        <button class="rov-stop rounded-lg bg-red-500/[0.07] border border-red-500/[0.20]
+                       font-sans text-[7px] font-semibold tracking-[1.5px] uppercase
+                       text-red-400/70 flex items-center justify-center"
+          onmousedown="sendCmd('imp_stop')" ontouchstart="sendCmd('imp_stop')">IMP 0</button>
+        <button id="brush-btn"
+                class="rov-btn rounded-lg bg-white/[0.04] border border-white/[0.09]
+                       font-sans text-[7px] font-semibold tracking-[1.5px] uppercase
+                       text-white/60 flex items-center justify-center"
+          onmousedown="sendCmd('brush')" ontouchstart="sendCmd('brush')">BRUSH</button>
+
+        <button class="rov-btn rounded-lg bg-white/[0.04] border border-white/[0.09]
+                       font-sans text-[7px] font-semibold tracking-[1.5px] uppercase
+                       text-white/60 flex items-center justify-center"
+          onmousedown="sendCmd('man_spd_up')" ontouchstart="sendCmd('man_spd_up')">MAN +</button>
+        <button class="rov-btn rounded-lg bg-white/[0.04] border border-white/[0.09]
+                       font-sans text-[7px] font-semibold tracking-[1.5px] uppercase
+                       text-white/60 flex items-center justify-center"
+          onmousedown="sendCmd('man_spd_down')" ontouchstart="sendCmd('man_spd_down')">MAN −</button>
+      </div>
+
     </div>
-
   </div>
 
 </div><!-- /hud -->
@@ -543,125 +362,170 @@
 const socket = io();
 function sendCmd(cmd) { socket.emit('command', { cmd }); }
 
-/* ── direction hold ── */
-const heldDirs = new Set();
-const dirPriority = ['w','s','a','d'];
-function pressDir(k)   { if (!heldDirs.has(k)) { heldDirs.add(k); resolveDir(); } }
-function releaseDir(k) { heldDirs.delete(k); resolveDir(); }
-function resolveDir() {
-  for (const k of dirPriority) { if (heldDirs.has(k)) { sendCmd(k); return; } }
+// ── CAN motor controls (W / A / S / D) ───────────────────────────
+const held = new Set();
+const priority = ['w','s','a','d'];
+function pressDir(k)   { if (!held.has(k)) { held.add(k); resolve(); } }
+function releaseDir(k) { held.delete(k); resolve(); }
+function resolve() {
+  for (const k of priority) { if (held.has(k)) { sendCmd(k); return; } }
   sendCmd('x');
 }
 
 function setDirVisual(dir) {
-  ['btn-w','btn-s','btn-a','btn-d'].forEach(id => document.getElementById(id).classList.remove('pressed'));
+  ['btn-w','btn-s','btn-a','btn-d'].forEach(id =>
+    document.getElementById(id).classList.remove('pressed'));
   const map = { FORWARD:'btn-w', REVERSE:'btn-s', LEFT:'btn-a', RIGHT:'btn-d' };
   if (map[dir]) document.getElementById(map[dir]).classList.add('pressed');
 }
 
-/* ── keyboard ── */
+// ── Maneuver ESC controls (Arrow keys) ───────────────────────────
+const manHeld = new Set();
+const manPriority = ['man_w','man_s','man_a','man_d'];
+function pressMan(k)   { if (!manHeld.has(k)) { manHeld.add(k); resolveMan(); } }
+function releaseMan(k) { manHeld.delete(k); resolveMan(); }
+function resolveMan() {
+  for (const k of manPriority) { if (manHeld.has(k)) { sendCmd(k); return; } }
+  sendCmd('man_x');
+}
+
+function setManVisual(dir) {
+  ['btn-man-w','btn-man-s','btn-man-a','btn-man-d'].forEach(id =>
+    document.getElementById(id).classList.remove('pressed'));
+  const map = { FORWARD:'btn-man-w', REVERSE:'btn-man-s', LEFT:'btn-man-a', RIGHT:'btn-man-d' };
+  if (map[dir]) document.getElementById(map[dir]).classList.add('pressed');
+}
+
+// ── Keyboard ──────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
-  if (['w','s','a','d'].includes(k)) { pressDir(k); e.preventDefault(); }
-  else if (k === 'x')                   sendCmd('x');
-  else if (k === '+' || k === '=')      sendCmd('+');
-  else if (k === '-')                   sendCmd('-');
-  else if (k === 'arrowup')           { sendCmd('imp_up');   e.preventDefault(); }
-  else if (k === 'arrowdown')         { sendCmd('imp_down'); e.preventDefault(); }
-  else if (k === '0')                   sendCmd('imp_stop');
-  else if (k === 'b')                   sendCmd('brush');
+  if      (['w','s','a','d'].includes(k)) { pressDir(k); e.preventDefault(); }
+  else if (k === 'x')                      sendCmd('x');
+  else if (k === '+' || k === '=')         sendCmd('+');
+  else if (k === '-')                      sendCmd('-');
+  else if (e.key === 'ArrowUp')           { pressMan('man_w'); e.preventDefault(); }
+  else if (e.key === 'ArrowDown')         { pressMan('man_s'); e.preventDefault(); }
+  else if (e.key === 'ArrowLeft')         { pressMan('man_a'); e.preventDefault(); }
+  else if (e.key === 'ArrowRight')        { pressMan('man_d'); e.preventDefault(); }
+  else if (k === '0')                      sendCmd('imp_stop');
+  else if (k === 'b')                      sendCmd('brush');
 });
 document.addEventListener('keyup', e => {
   const k = e.key.toLowerCase();
-  if (['w','s','a','d'].includes(k)) releaseDir(k);
+  if      (['w','s','a','d'].includes(k)) releaseDir(k);
+  else if (e.key === 'ArrowUp')    releaseMan('man_w');
+  else if (e.key === 'ArrowDown')  releaseMan('man_s');
+  else if (e.key === 'ArrowLeft')  releaseMan('man_a');
+  else if (e.key === 'ArrowRight') releaseMan('man_d');
 });
 
-/* ── impeller fill helper ── */
+// ── Impeller split-fill helper ────────────────────────────────────
 function setImpFill(id, pwr) {
   const el = document.getElementById(id);
   if (pwr > 0) {
-    el.style.left = '50%';
-    el.style.width = (pwr / 2) + '%';
-    el.style.background = 'var(--ok)';
-    el.style.boxShadow = '0 0 8px var(--ok-glow)';
+    el.style.left       = '50%';
+    el.style.width      = (pwr / 2) + '%';
+    el.style.background = 'rgba(52,211,153,0.70)';
   } else if (pwr < 0) {
     const w = Math.abs(pwr) / 2;
-    el.style.left = (50 - w) + '%';
-    el.style.width = w + '%';
-    el.style.background = 'var(--cyan)';
-    el.style.boxShadow = '0 0 8px var(--cyan-glow)';
+    el.style.left       = (50 - w) + '%';
+    el.style.width      = w + '%';
+    el.style.background = 'rgba(96,165,250,0.80)';
   } else {
     el.style.width = '0%';
   }
 }
 
-/* ── state updates ── */
-const dirIcons = { STOPPED:'■', FORWARD:'▲', REVERSE:'▼', LEFT:'◄', RIGHT:'►' };
+// ── Direction icons ───────────────────────────────────────────────
+const icons = { STOPPED:'■', FORWARD:'▲', REVERSE:'▼', LEFT:'◀', RIGHT:'▶' };
+const dirColors = {
+  FORWARD : 'text-emerald-400',
+  REVERSE : 'text-blue-300',
+  LEFT    : 'text-white/55',
+  RIGHT   : 'text-white/55',
+  STOPPED : 'text-white/32',
+};
 
+// ── State update ──────────────────────────────────────────────────
 socket.on('state', s => {
-  /* direction */
+
+  // Direction badge
   const badge = document.getElementById('dir-badge');
-  badge.textContent = (dirIcons[s.direction] || '?') + '\u2003' + s.direction;
-  badge.className = 'dir-badge nop ' + s.direction.toLowerCase();
+  badge.textContent = (icons[s.direction] || '?') + '\u00a0\u00a0' + s.direction;
+  badge.className = 'font-sans text-[9px] font-semibold tracking-[3px] uppercase transition-colors duration-200 '
+    + (dirColors[s.direction] || 'text-white/32');
   setDirVisual(s.direction);
 
-  /* speed */
-  document.getElementById('spd-big').textContent = s.speed;
-  document.getElementById('spd-max-lbl').textContent = 'OF ' + s.speed_max;
+  // Speed
+  document.getElementById('spd-big').textContent     = s.speed;
+  document.getElementById('spd-max-lbl').textContent = 'of ' + s.speed_max;
   const sp = (s.speed / s.speed_max * 100) + '%';
   document.getElementById('spd-bar').style.width  = sp;
   document.getElementById('spd-bar2').style.width = sp;
   document.getElementById('spd-val').textContent  = s.speed + ' / ' + s.speed_max;
 
-  /* impeller */
-  const ap = Math.abs(s.impeller_power);
+  // Impeller
+  const ap   = Math.abs(s.impeller_power);
   const ipEl = document.getElementById('imp-pwr');
   ipEl.textContent = s.impeller_power + '%';
-  ipEl.className = 'db-val ' + (ap > 0 ? 'accent' : 'dim');
+  ipEl.className   = 'block font-mono text-5xl leading-none tracking-tight '
+    + (ap > 0 ? 'text-blue-300/90' : 'text-white/20');
   document.getElementById('imp-pwm').textContent = 'PWM · ' + s.impeller_read_pwm;
   setImpFill('imp-bar',  s.impeller_power);
   setImpFill('imp-bar2', s.impeller_power);
   document.getElementById('imp-val').textContent = s.impeller_power + '%';
 
-  /* read power */
-  const rdp = Math.abs(s.impeller_read_power);
+  // Power read
+  const rdp    = Math.abs(s.impeller_read_power);
   const rdpBar = document.getElementById('rdp-bar');
-  rdpBar.style.width = rdp + '%';
-  rdpBar.className = 'thin-bar-fill' + (rdp > 50 ? ' r' : '');
+  rdpBar.style.width      = rdp + '%';
+  rdpBar.style.background = rdp > 50 ? 'rgba(248,113,113,0.75)' : 'rgba(255,255,255,0.35)';
   document.getElementById('rdp-val').textContent = s.impeller_read_power + '%';
 
-  /* brush */
-  const brushEl = document.getElementById('hud-brush');
-  brushEl.textContent = s.brush_on ? 'ON' : 'OFF';
-  brushEl.className = 'sys-val ' + (s.brush_on ? 'ok' : 'dim');
-  document.getElementById('brush-btn').className = 'sbtn' + (s.brush_on ? ' brush-on' : '');
+  // Brush
+  const bEl = document.getElementById('hud-brush');
+  bEl.textContent = s.brush_on ? 'ON' : 'OFF';
+  bEl.className   = 'font-mono text-[11px] ' + (s.brush_on ? 'text-emerald-400' : 'text-white/22');
+  const bBtn = document.getElementById('brush-btn');
+  if (s.brush_on) bBtn.classList.add('brush-active');
+  else            bBtn.classList.remove('brush-active');
 
-  /* water */
+  // Water
   const wEl = document.getElementById('hud-water');
-  const wOv = document.getElementById('water-overlay');
+  const wOv = document.getElementById('water-alert');
   if (s.water_warning) {
-    wEl.textContent = 'WARN'; wEl.className = 'sys-val blink';
-    wOv.classList.add('show');
+    wEl.textContent = 'WARN'; wEl.className = 'font-mono text-[11px] text-red-400 anim-blink';
+    wOv.classList.remove('hidden');
   } else {
-    wEl.textContent = 'OK'; wEl.className = 'sys-val ok';
-    wOv.classList.remove('show');
+    wEl.textContent = 'OK'; wEl.className = 'font-mono text-[11px] text-emerald-400';
+    wOv.classList.add('hidden');
   }
 
-  /* teensy */
+  // Teensy
   const tc = document.getElementById('hud-teensy');
   tc.textContent = s.teensy_connected ? 'ON' : '---';
-  tc.className = 'sys-val ' + (s.teensy_connected ? 'ok' : 'dim');
+  tc.className   = 'font-mono text-[11px] ' + (s.teensy_connected ? 'text-emerald-400' : 'text-white/22');
 
-  /* range */
+  // Range
   const rv = document.getElementById('range-val');
   if (s.distance_mm > 0) {
     rv.textContent = s.distance_mm;
-    rv.className = 'db-val ' +
-      (s.distance_mm > 500 ? 'ok' : s.distance_mm > 200 ? 'warn' : 'danger');
+    rv.className   = 'block font-mono text-5xl leading-none tracking-tight '
+      + (s.distance_mm > 500 ? 'text-emerald-400/90' : s.distance_mm > 200 ? 'text-amber-400/90' : 'text-red-400/90');
   } else {
     rv.textContent = '---';
-    rv.className = 'db-val dim';
+    rv.className   = 'block font-mono text-5xl leading-none tracking-tight text-white/20';
   }
+
+  // Maneuver
+  const mdEl = document.getElementById('hud-man-dir');
+  mdEl.textContent = s.maneuver_direction || 'STOPPED';
+  mdEl.className   = 'font-mono text-[11px] '
+    + (s.maneuver_direction !== 'STOPPED' ? 'text-emerald-400' : 'text-white/22');
+  setManVisual(s.maneuver_direction || 'STOPPED');
+
+  document.getElementById('hud-man-pwr').textContent = (s.maneuver_power ?? 50) + '%';
+
 });
 </script>
 </body>
