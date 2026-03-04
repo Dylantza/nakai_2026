@@ -7,7 +7,7 @@ import serial.tools.list_ports
 import cv2
 from flask import Flask, render_template, Response
 from flask_socketio import SocketIO, emit
-
+#dylan 
 try:
     from pypylon import pylon
     PYLON_AVAILABLE = True
