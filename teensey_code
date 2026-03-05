@@ -29,6 +29,13 @@ Servo vesc;
 const int vescPin = 10;
 int vescPWM = pwmCenter;
 
+// --- Lumen Subsea Light — On/Off ---
+Servo light;
+const int lightPin     = 8;
+const int lightPWM_OFF = 1100;
+const int lightPWM_ON  = 1900;
+int lightPWM = lightPWM_OFF;
+
 // --- TW-40A #2 & #3 — Maneuver motors, Arrow keys controlled ---
 // Left  = pin 6,  Right = pin 7
 // Differential steering mirrors the CAN motor logic:
@@ -150,6 +157,10 @@ void setup() {
   vesc.writeMicroseconds(pwmCenter);
   delay(1000);
 
+  // Lumen Light — init off
+  light.attach(lightPin, 1000, 2000);
+  light.writeMicroseconds(lightPWM_OFF);
+
   // TW-40A #2 & #3 — Maneuver ESCs
   escManLeft.attach(escManLeftPin, 1000, 2000);
   escManLeft.writeMicroseconds(pwmCenter);
@@ -157,13 +168,13 @@ void setup() {
   escManRight.writeMicroseconds(pwmCenter);
   delay(2000);  // allow ESC arming
 
-  digitalWrite(LED_PIN, LOW);
   Serial.println("--- System Ready ---");
   Serial.println("W/A/S/D/X/+/-  = CAN motors");
   Serial.println("man_w/s/a/d/x  = Maneuver ESCs (arrow keys)");
   Serial.println("man_spd_up/dn  = Maneuver power (currently 50%)");
   Serial.println("-100..100      = TW-40A Impeller");
   Serial.println("brush_on/off   = Brush");
+  Serial.println("light_on/off   = Lumen Light");
 }
 
 void loop() {
@@ -194,10 +205,7 @@ void loop() {
     lastWaterCheck = now;
     int waterVal = analogRead(WATER_SENSOR_PIN);
     if (waterVal < WATER_THRESHOLD_LOW) {
-      digitalWrite(LED_PIN, HIGH);
       Serial.println("Water!!!");
-    } else {
-      digitalWrite(LED_PIN, LOW);
     }
   }
 
@@ -207,7 +215,15 @@ void loop() {
     input.trim();
     input.toLowerCase();
 
-    if (input == "brush_on") {
+    if (input == "light_on") {
+      lightPWM = lightPWM_ON;
+      Serial.println("Light: ON");
+    }
+    else if (input == "light_off") {
+      lightPWM = lightPWM_OFF;
+      Serial.println("Light: OFF");
+    }
+    else if (input == "brush_on") {
       vescPWM = pwmMax;
       Serial.println("Brush Motor: ON (2000)");
     }
@@ -241,6 +257,9 @@ void loop() {
 
   // --- 5. VESC Brush ---
   vesc.writeMicroseconds(vescPWM);
+
+  // --- 5b. Lumen Light ---
+  light.writeMicroseconds(lightPWM);
 
   // --- 6. TW-40A #2 & #3 Maneuver ESCs ---
   escManLeft.writeMicroseconds(manLeftPWM);

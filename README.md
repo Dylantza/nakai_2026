@@ -310,6 +310,24 @@ services:
 
 ---
 
+## Teensy Pin Layout
+
+| Pin | Type | Connected To | Notes |
+|---|---|---|---|
+| 0 | UART RX (Serial1) | Distance Sensor | 115200 baud, trigger byte 0x55 |
+| 1 | UART TX (Serial1) | Distance Sensor | 115200 baud |
+| 6 | PWM out | TW-40A ESC #2 — Maneuver Left | 1000–2000 µs, center = 1500 |
+| 7 | PWM out | TW-40A ESC #3 — Maneuver Right | 1000–2000 µs, center = 1500 |
+| 8 | PWM out | Lumen Subsea Light | 1100 µs = OFF, 1900 µs = full brightness |
+| 9 | PWM out | TW-40A ESC #1 — Main Impeller | 1000–2000 µs, center = 1500 |
+| 10 | PWM out | VESC — Brush Motor | 1500 µs = OFF, 2000 µs = ON |
+| 13 | Digital out | Onboard LED | ON while powered |
+| 14 | Analog in | Water Ingress Sensor | Alert if reading < 400 |
+| 30 | CAN3 RX | Drive Motors (L id=1, R id=2) | FlexCAN_T4 @ 1 Mbit/s |
+| 31 | CAN3 TX | Drive Motors (L id=1, R id=2) | FlexCAN_T4 @ 1 Mbit/s |
+
+---
+
 ## Serial Protocol (Jetson → Teensy)
 
 Commands sent as ASCII strings terminated with `\n`:

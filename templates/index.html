@@ -75,6 +75,13 @@
     color: rgb(52,211,153) !important;
   }
 
+  /* Light active state */
+  .light-active {
+    background: rgba(250,204,21,0.12) !important;
+    border-color: rgba(250,204,21,0.40) !important;
+    color: rgb(250,204,21) !important;
+  }
+
   /* Track bars */
   .t-fill   { transition: width 0.18s ease; }
   .sp-fill  { transition: width 0.14s ease, left 0.14s ease; }
@@ -159,6 +166,10 @@
         <div class="flex justify-between items-baseline">
           <span class="font-sans text-[7px] font-semibold tracking-[4px] uppercase text-white/35">Brush</span>
           <span id="hud-brush" class="font-mono text-[11px] text-white/22">OFF</span>
+        </div>
+        <div class="flex justify-between items-baseline">
+          <span class="font-sans text-[7px] font-semibold tracking-[4px] uppercase text-white/35">Light</span>
+          <span id="hud-light" class="font-mono text-[11px] text-white/22">OFF</span>
         </div>
         <div class="flex justify-between items-baseline">
           <span class="font-sans text-[7px] font-semibold tracking-[4px] uppercase text-white/35">H₂O</span>
@@ -342,6 +353,12 @@
                        text-white/60 flex items-center justify-center"
           onmousedown="sendCmd('brush')" ontouchstart="sendCmd('brush')">BRUSH</button>
 
+        <button id="light-btn"
+                class="rov-btn rounded-lg bg-white/[0.04] border border-white/[0.09]
+                       font-sans text-[7px] font-semibold tracking-[1.5px] uppercase
+                       text-white/60 flex items-center justify-center"
+          onmousedown="sendCmd('light')" ontouchstart="sendCmd('light')">LIGHT</button>
+
         <button class="rov-btn rounded-lg bg-white/[0.04] border border-white/[0.09]
                        font-sans text-[7px] font-semibold tracking-[1.5px] uppercase
                        text-white/60 flex items-center justify-center"
@@ -489,6 +506,14 @@ socket.on('state', s => {
   const bBtn = document.getElementById('brush-btn');
   if (s.brush_on) bBtn.classList.add('brush-active');
   else            bBtn.classList.remove('brush-active');
+
+  // Light
+  const lEl = document.getElementById('hud-light');
+  lEl.textContent = s.light_on ? 'ON' : 'OFF';
+  lEl.className   = 'font-mono text-[11px] ' + (s.light_on ? 'text-yellow-300' : 'text-white/22');
+  const lBtn = document.getElementById('light-btn');
+  if (s.light_on) lBtn.classList.add('light-active');
+  else            lBtn.classList.remove('light-active');
 
   // Water
   const wEl = document.getElementById('hud-water');

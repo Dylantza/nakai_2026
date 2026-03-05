@@ -44,6 +44,7 @@ state = {
     'speed_max': 10,
     'impeller_power': 0,
     'brush_on': False,
+    'light_on': False,
     'impeller_read_power': 0,
     'impeller_read_pwm': 1500,
     'water_warning': False,
@@ -175,6 +176,9 @@ def on_command(data):
     elif cmd == 'brush':
         state['brush_on'] = not state['brush_on']
         send_serial('brush_on' if state['brush_on'] else 'brush_off')
+    elif cmd == 'light':
+        state['light_on'] = not state['light_on']
+        send_serial('light_on' if state['light_on'] else 'light_off')
     elif cmd in ('man_w', 'man_s', 'man_a', 'man_d'):
         man_dir_map = {'man_w': 'FORWARD', 'man_s': 'REVERSE', 'man_a': 'LEFT', 'man_d': 'RIGHT'}
         state['maneuver_direction'] = man_dir_map[cmd]
