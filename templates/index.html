@@ -182,15 +182,15 @@
   </div>
 
   <!-- ─── SNAP BUTTON ─────────────────────────────────────── -->
-  <a href="/snapshot" target="_blank"
+  <button onclick="takeSnapshot()"
      class="absolute bottom-7 left-7 pointer-events-auto w-14 h-14 rounded-full
             border-2 border-white/45 flex items-center justify-center
-            hover:border-white/75 transition-colors cursor-pointer">
+            hover:border-white/75 transition-colors cursor-pointer bg-transparent">
     <div class="w-10 h-10 rounded-full bg-red-500
                 shadow-[0_0_14px_rgba(239,68,68,0.55)]
                 hover:bg-red-400 active:scale-[0.88]
                 transition-all duration-100"></div>
-  </a>
+  </button>
 
   <!-- ─── KB HINT ──────────────────────────────────────────── -->
   <div class="absolute bottom-[206px] left-1/2 -translate-x-1/2
@@ -527,6 +527,34 @@ socket.on('state', s => {
   document.getElementById('hud-man-pwr').textContent = (s.maneuver_power ?? 50) + '%';
 
 });
+
+// ── Snapshot: save to client desktop in date folders ─────────────
+let snapshotDirHandle = null;
+
+async function takeSnapshot() {
+  try {
+    if (!snapshotDirHandle) {
+      snapshotDirHandle = await window.showDirectoryPicker({
+        id: 'rov-snapshots',
+        startIn: 'desktop',
+        mode: 'readwrite'
+      });
+    }
+    const resp = await fetch('/snapshot');
+    if (!resp.ok) return;
+    const blob = await resp.blob();
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, ''); // HHMMSS
+    const dateDir = await snapshotDirHandle.getDirectoryHandle(dateStr, { create: true });
+    const fileHandle = await dateDir.getFileHandle('snapshot_' + timeStr + '.jpg', { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error('Snapshot failed:', e);
+  }
+}
 </script>
 </body>
 </html>

@@ -290,10 +290,13 @@ def video_feed():
 
 @app.route('/snapshot')
 def snapshot():
+    global _placeholder
     with frame_lock:
         frame = latest_frame
     if frame is None:
-        return 'No frame available', 503
+        if _placeholder is None:
+            _placeholder = _make_placeholder()
+        frame = _placeholder
     return Response(frame, mimetype='image/jpeg')
 
 
